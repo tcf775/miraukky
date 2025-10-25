@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Permissions-Policy" content="camera=*, microphone=*">
+    <title>顔の向き検出デモ</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        h1 { margin-bottom: 20px; }
+        #container {
+            display: flex;
+            gap: 30px;
+            align-items: flex-start;
+        }
+        #videoContainer {
+            position: relative;
+            display: inline-block;
+            line-height: 0;
+        }
+        #video {
+            width: 640px;
+            height: 480px;
+            transform: scaleX(-1);
+            border-radius: 10px;
+        }
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            transform: scaleX(-1);
+        }
+        #panel {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 10px;
+            min-width: 300px;
+        }
+        .info-item {
+            background: #333;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .info-label {
+            font-size: 14px;
+            color: #aaa;
+            margin-bottom: 5px;
+        }
+        .info-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin: 5px;
+        }
+        button:hover { background: #45a049; }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        #status {
+            margin: 10px 0;
+            font-size: 14px;
+            color: #aaa;
+        }
+        .direction-indicator {
+            font-size: 48px;
+            text-align: center;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>face-api.js 顔の向き検出デモ</h1>
+    
+    <div id="controls">
+        <button id="startBtn" onclick="startVideo()">カメラ開始</button>
+        <button id="stopBtn" onclick="stopVideo()" disabled>停止</button>
+    </div>
+    
+    <div id="status">モデル読み込み中...</div>
+    
+    <div id="container">
+        <div id="videoContainer">
+            <video id="video" autoplay muted></video>
+            <canvas id="overlay"></canvas>
+        </div>
+        
+        <div id="panel">
+            <h2>顔の向き</h2>
+            <div class="direction-indicator" id="directionIcon">👤</div>
+            <div class="info-item">
+                <div class="info-label">ヨー（左右回転）</div>
+                <div class="info-value" id="yawValue">--</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">ピッチ（上下傾き）</div>
+                <div class="info-value" id="pitchValue">--</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">ロール（傾き）</div>
+                <div class="info-value" id="rollValue">--</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let modelsLoaded = false;
+        let stream = null;
+        let detectionInterval = null;
+
+        async function loadModels() {
+            const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+            await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+            await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+            modelsLoaded = true;
+            document.getElementById('status').textContent = 'モデル読み込み完了！「カメラ開始」をクリックしてください。';
+        }
+
+        async function startVideo() {
+            if (!modelsLoaded) {
+                alert('モデルがまだ読み込まれていません。');
+                return;
+            }
+
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 640, height: 480 } 
+                });
+                const video = document.getElementById('video');
+                video.srcObject = stream;
+                
+                video.addEventListener('loadedmetadata', () => {
+                    const canvas = document.getElementById('overlay');
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    canvas.style.width = '640px';
+                    canvas.style.height = '480px';
+                    
+                    document.getElementById('startBtn').disabled = true;
+                    document.getElementById('stopBtn').disabled = false;
+                    document.getElementById('status').textContent = 'リアルタイム検出中...';
+                    
+                    detectHeadPoseRealtime();
+                });
+            } catch (err) {
+                alert('カメラのアクセスに失敗しました: ' + err.message);
+            }
+        }
+
+        function stopVideo() {
+            if (detectionInterval) {
+                clearInterval(detectionInterval);
+                detectionInterval = null;
+            }
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            const canvas = document.getElementById('overlay');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            document.getElementById('yawValue').textContent = '--';
+            document.getElementById('pitchValue').textContent = '--';
+            document.getElementById('rollValue').textContent = '--';
+            document.getElementById('directionIcon').textContent = '👤';
+            
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('status').textContent = '停止しました。';
+        }
+
+        function calculateHeadPose(landmarks) {
+            const positions = landmarks.positions;
+            
+            // 鼻先（30番）
+            const noseTip = positions[30];
+            // 左目外側（36番）、右目外側（45番）
+            const leftEye = positions[36];
+            const rightEye = positions[45];
+            // 顎の中心（8番）
+            const chin = positions[8];
+            
+            // ヨー（左右回転）: 鼻と目の水平位置関係
+            const eyeCenterX = (leftEye.x + rightEye.x) / 2;
+            const yaw = (noseTip.x - eyeCenterX) / (rightEye.x - leftEye.x) * 90;
+            
+            // ピッチ（上下傾き）: 鼻と顎の垂直位置関係
+            const eyeCenterY = (leftEye.y + rightEye.y) / 2;
+            const faceHeight = chin.y - eyeCenterY;
+            const pitch = (noseTip.y - eyeCenterY) / faceHeight * 45;
+            
+            // ロール（傾き）: 目の傾き
+            const roll = Math.atan2(rightEye.y - leftEye.y, rightEye.x - leftEye.x) * 180 / Math.PI;
+            
+            return { yaw, pitch, roll };
+        }
+
+        function getDirectionIcon(yaw, pitch) {
+            if (Math.abs(yaw) < 15 && Math.abs(pitch) < 15) return '👤'; // 正面
+            if (yaw > 30) return '👈'; // 左向き
+            if (yaw < -30) return '👉'; // 右向き
+            if (pitch > 20) return '👇'; // 下向き
+            if (pitch < -20) return '👆'; // 上向き
+            return '👤';
+        }
+
+        async function detectHeadPoseRealtime() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('overlay');
+            
+            detectionInterval = setInterval(async () => {
+                const detection = await faceapi
+                    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                    .withFaceLandmarks();
+
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                if (detection) {
+                    const box = detection.detection.box;
+                    const pose = calculateHeadPose(detection.landmarks);
+                    
+                    // パネル更新
+                    document.getElementById('yawValue').textContent = `${pose.yaw.toFixed(1)}°`;
+                    document.getElementById('pitchValue').textContent = `${pose.pitch.toFixed(1)}°`;
+                    document.getElementById('rollValue').textContent = `${pose.roll.toFixed(1)}°`;
+                    document.getElementById('directionIcon').textContent = getDirectionIcon(pose.yaw, pose.pitch);
+                    
+                    // 顔枠描画
+                    ctx.strokeStyle = '#4CAF50';
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(box.x, box.y, box.width, box.height);
+                    
+                    // 向き表示（反転を考慮）
+                    ctx.save();
+                    ctx.scale(-1, 1);
+                    ctx.fillStyle = '#4CAF50';
+                    ctx.font = 'bold 16px Arial';
+                    ctx.fillText(`Y:${pose.yaw.toFixed(0)}° P:${pose.pitch.toFixed(0)}° R:${pose.roll.toFixed(0)}°`, 
+                                 -(box.x + box.width), box.y - 10);
+                    ctx.restore();
+                    
+                    // 向きを示す矢印
+                    const centerX = box.x + box.width / 2;
+                    const centerY = box.y + box.height / 2;
+                    const arrowLength = 50;
+                    const arrowX = centerX + Math.sin(pose.yaw * Math.PI / 180) * arrowLength;
+                    const arrowY = centerY + Math.sin(pose.pitch * Math.PI / 180) * arrowLength;
+                    
+                    ctx.strokeStyle = '#ff6b6b';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(centerX, centerY);
+                    ctx.lineTo(arrowX, arrowY);
+                    ctx.stroke();
+                    
+                    // 矢印の先端
+                    ctx.fillStyle = '#ff6b6b';
+                    ctx.beginPath();
+                    ctx.arc(arrowX, arrowY, 5, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+            }, 100);
+        }
+
+        window.addEventListener('beforeunload', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        });
+
+        loadModels();
+    </script>
+</body>
+</html>

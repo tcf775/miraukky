@@ -1,0 +1,1853 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ミッキーラッキーウィスキーゲーム</title>
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fireworks-js@2.10.8/dist/index.umd.js"></script>
+    <script src="face-detection.js"></script>
+    <link rel="stylesheet" href="css/support-animations.css">
+    <script src="js/support-messages.js"></script>
+    <script src="js/emotion-support.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700;900&display=swap');
+        
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            overflow-x: hidden;
+        }
+        
+        .container {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.45);
+            padding: 20px;
+            border-radius: 30px;
+            max-width: 1200px;
+            width: 95%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            z-index: 10000;
+        }
+        
+        
+        #video { 
+            width: 100%;
+            max-width: 800px;        /* 最大幅を拡大 */
+            height: auto;
+            aspect-ratio: 4/3;
+            border-radius: 20px; 
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            transform: scaleX(-1);
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            transition: all 0.3s;
+            display: block;
+            margin: 0 auto;
+            position: relative;
+        }
+        
+        #faceCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            max-width: 800px;        /* 最大幅を拡大 */
+            height: auto;
+            aspect-ratio: 4/3;
+            transform: scaleX(-1);
+            pointer-events: none;
+            margin: 0 auto;
+        }
+        
+        #video:hover {
+            transform: scaleX(-1) scale(1.02);
+            box-shadow: 0 15px 50px rgba(255, 215, 0, 0.5);
+        }
+        
+        .instruction {
+            font-size: clamp(0.9em, 3vw, 1.3em);
+            margin: 15px 0;
+            color: #6bcf7f;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            font-weight: 700;
+            animation: float 3s ease-in-out infinite;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        }
+        
+        button {
+            font-size: clamp(1em, 4vw, 1.8em);
+            padding: clamp(15px, 3vw, 20px) clamp(30px, 8vw, 50px);
+            margin: 10px;
+            border: none;
+            border-radius: 60px;
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 8px 25px rgba(245, 87, 108, 0.4);
+            font-weight: 900;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        button::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+        
+        button:hover::before {
+            width: 300px;
+            height: 300px;
+        }
+        
+        button:hover { 
+            transform: scale(1.1) rotate(2deg);
+            box-shadow: 0 12px 35px rgba(245, 87, 108, 0.6);
+        }
+        
+        button:active {
+            transform: scale(0.95);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: scale(1);
+        }
+        
+        .result {
+            font-size: clamp(1.5em, 5vw, 2.5em);
+            margin: 20px 0;
+            font-weight: 900;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.5);
+            animation: resultAppear 0.8s ease-out;
+        }
+        
+        @keyframes resultAppear {
+            0% { transform: scale(0) rotate(360deg); opacity: 0; }
+            100% { transform: scale(1) rotate(0deg); opacity: 1; }
+        }
+        
+        .photos {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        
+        .photo-item {
+            text-align: center;
+            animation: photoSlideIn 0.6s ease-out;
+            transition: transform 0.3s;
+        }
+        
+        .photo-item:hover {
+            transform: translateY(-10px) rotate(2deg);
+        }
+        
+        @keyframes photoSlideIn {
+            0% { transform: translateY(50px); opacity: 0; }
+            100% { transform: translateY(0); opacity: 1; }
+        }
+        
+        .photo-item img {
+            width: clamp(150px, 30vw, 200px);
+            height: clamp(112px, 22.5vw, 150px);
+            border-radius: 15px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+            transform: scaleX(-1);
+            border: 3px solid rgba(255, 255, 255, 0.5);
+            transition: all 0.3s;
+        }
+        
+        .photo-item img:hover {
+            box-shadow: 0 12px 30px rgba(255, 215, 0, 0.6);
+        }
+        
+        .photo-item .label {
+            margin-top: 10px;
+            font-size: clamp(0.9em, 2.5vw, 1.1em);
+            font-weight: 700;
+        }
+        
+        .emotion-details {
+            font-size: clamp(0.7em, 2vw, 0.9em);
+            margin-top: 5px;
+            text-align: left;
+            background: rgba(0,0,0,0.4);
+            padding: 10px;
+            border-radius: 10px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .emotion-bar {
+            display: flex;
+            align-items: center;
+            margin: 3px 0;
+        }
+        
+        .emotion-bar .name {
+            width: 80px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+        
+        .emotion-bar .bar {
+            flex: 1;
+            height: 18px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 0 5px;
+        }
+        
+        .emotion-bar .fill {
+            height: 100%;
+            background: linear-gradient(90deg, #f093fb 0%, #f5576c 50%, #ffd93d 100%);
+            transition: width 0.5s ease-out;
+            animation: barGlow 2s ease-in-out infinite;
+        }
+        
+        @keyframes barGlow {
+            0%, 100% { box-shadow: 0 0 5px rgba(255, 215, 0, 0.5); }
+            50% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.8); }
+        }
+        
+        .emotion-bar .value {
+            width: 50px;
+            text-align: right;
+            font-size: 0.85em;
+            font-weight: 700;
+        }
+        
+        .stars {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+        
+        .star {
+            position: absolute;
+            width: 3px;
+            height: 3px;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle 3s ease-in-out infinite;
+        }
+        
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.3; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.5); }
+        }
+        
+        #feverCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            display: none;
+        }
+        
+        #fireworksCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+        
+        /* 顔検出フィードバック */
+        .feedback-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        .detection-indicator {
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            transition: background-color 0.3s ease;
+        }
+
+        .detection-indicator.detected {
+            background: rgba(0, 128, 0, 0.8);
+        }
+
+        .detection-indicator.not-detected {
+            background: rgba(255, 0, 0, 0.8);
+        }
+
+        .confidence-bar {
+            width: 100px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 2px;
+            margin-top: 5px;
+        }
+
+        .confidence-bar::after {
+            content: '';
+            display: block;
+            height: 100%;
+            background: #4CAF50;
+            border-radius: 2px;
+            width: var(--confidence, 0%);
+            transition: width 0.3s ease;
+        }
+
+        .detection-message {
+            background: rgba(255, 193, 7, 0.9);
+            color: #333;
+            padding: 10px;
+            border-radius: 8px;
+            display: none;
+            font-weight: 600;
+        }
+
+        .detection-message.show {
+            display: block;
+        }
+
+        .detection-message.error {
+            background: rgba(244, 67, 54, 0.9);
+            color: white;
+        }
+        
+        .fever-text {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 10em;
+            font-weight: 900;
+            color: #ffd700;
+            text-shadow: 0 0 30px #ff0000, 0 0 60px #ff0000;
+            animation: feverPulse 0.5s ease-in-out;
+            z-index: 10000;
+            pointer-events: none;
+        }
+        
+        .countdown-overlay {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 15em;
+            font-weight: 900;
+            color: #fff;
+            text-shadow: 0 0 40px #ff0000, 0 0 80px #ff0000, 5px 5px 20px rgba(0,0,0,0.8);
+            animation: countdownPulse 0.5s ease-out;
+            z-index: 10001;
+            pointer-events: none;
+        }
+        
+        .phrase-overlay {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 10em;
+            font-weight: 900;
+            color: #ff6b6b;
+            text-shadow: 0 0 40px #ff6b6b, 0 0 80px #ff6b6b, 10px 10px 30px rgba(0,0,0,0.9);
+            animation: phraseBoom 0.8s ease-out;
+            z-index: 10001;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        
+        .shutter-overlay {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 10em;
+            font-weight: 900;
+            color: #ffd700;
+            text-shadow: 0 0 40px #ffd700, 0 0 80px #ffd700, 10px 10px 30px rgba(0,0,0,0.9);
+            animation: shutterBoom 0.8s ease-out;
+            z-index: 10001;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+        
+        .score-overlay {
+            position: fixed;
+            top: 20%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 2em;
+            font-weight: 700;
+            color: #4CAF50;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 20px;
+            border-radius: 15px;
+            text-shadow: 0 0 10px #4CAF50;
+            animation: scoreSlideIn 0.5s ease-out;
+            z-index: 10001;
+            pointer-events: none;
+        }
+        
+        @keyframes phraseBoom {
+            0% { 
+                transform: translate(-50%, -50%) scale(0) rotate(-10deg); 
+                opacity: 0; 
+            }
+            50% { 
+                transform: translate(-50%, -50%) scale(1.3) rotate(5deg); 
+                opacity: 1; 
+            }
+            100% { 
+                transform: translate(-50%, -50%) scale(1) rotate(0deg); 
+                opacity: 1; 
+            }
+        }
+        
+        @keyframes nicoSlide {
+            0% { 
+                right: -100%;
+            }
+            100% { 
+                right: 100%;
+            }
+        }
+        
+        @keyframes shutterBoom {
+            0% { 
+                transform: translate(-50%, -50%) scale(0) rotate(-10deg); 
+                opacity: 0; 
+            }
+            50% { 
+                transform: translate(-50%, -50%) scale(1.3) rotate(5deg); 
+                opacity: 1; 
+            }
+            100% { 
+                transform: translate(-50%, -50%) scale(1) rotate(0deg); 
+                opacity: 1; 
+            }
+        }
+        
+        @keyframes phraseSlideIn {
+            0% { 
+                transform: translate(-50%, -50%) scale(0) rotate(-180deg); 
+                opacity: 0; 
+            }
+            50% { 
+                transform: translate(-50%, -50%) scale(1.2) rotate(0deg); 
+                opacity: 1; 
+            }
+            100% { 
+                transform: translate(-50%, -50%) scale(1) rotate(0deg); 
+                opacity: 1; 
+            }
+        }
+        
+        @keyframes shutterFlash {
+            0% { 
+                transform: translate(-50%, -50%) scale(0); 
+                opacity: 0; 
+                background: rgba(255, 255, 255, 0.9);
+            }
+            30% { 
+                transform: translate(-50%, -50%) scale(1.3); 
+                opacity: 1; 
+                background: rgba(255, 255, 255, 0.5);
+            }
+            100% { 
+                transform: translate(-50%, -50%) scale(1); 
+                opacity: 1; 
+                background: transparent;
+            }
+        }
+        
+        @keyframes scoreSlideIn {
+            0% { 
+                transform: translate(-50%, -50%) translateY(-30px); 
+                opacity: 0; 
+                scale: 0.8;
+            }
+            100% { 
+                transform: translate(-50%, -50%) translateY(0); 
+                opacity: 1; 
+                scale: 1;
+            }
+        }
+        
+        @keyframes countdownPulse {
+            0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+            50% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+        
+        @keyframes feverPulse {
+            0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+            50% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+        
+        .ball-counter {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #ffd700;
+            padding: 15px 25px;
+            border-radius: 15px;
+            font-size: 2em;
+            font-weight: 900;
+            z-index: 9999;
+            display: none;
+            box-shadow: 0 5px 20px rgba(255, 215, 0, 0.5);
+            text-shadow: 0 0 10px #ffd700;
+            animation: counterPulse 1s ease-in-out infinite;
+        }
+        
+        @keyframes counterPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        @media (max-width: 768px) {
+            body {
+                align-items: center;
+                padding: 10px 0;
+            }
+            
+            .container {
+                padding: 10px;
+                width: 98%;
+                border-radius: 15px;
+                margin: 10px auto;
+            }
+            
+            #video {
+                max-width: 100%;
+                border-radius: 10px;
+                border-width: 3px;
+            }
+            
+            #faceCanvas {
+                max-width: 100%;
+            }
+            
+            .instruction {
+                font-size: 1em;
+                margin: 10px 0;
+            }
+            
+            button {
+                font-size: 1.2em;
+                padding: 12px 25px;
+                margin: 8px;
+                letter-spacing: 1px;
+            }
+            
+            .result {
+                font-size: 1.5em;
+                margin: 15px 0;
+            }
+            
+            .photos {
+                gap: 10px;
+                margin: 15px 0;
+            }
+            
+            .photo-item img {
+                width: 100%;
+                max-width: 280px;
+                height: auto;
+            }
+            
+            .photo-item .label {
+                font-size: 0.95em;
+            }
+            
+            .emotion-details {
+                font-size: 0.75em;
+                padding: 8px;
+            }
+            
+            .emotion-bar .name {
+                width: 60px;
+                font-size: 0.75em;
+            }
+            
+            .emotion-bar .bar {
+                height: 14px;
+            }
+            
+            .emotion-bar .value {
+                width: 40px;
+                font-size: 0.75em;
+            }
+            
+            .countdown-overlay {
+                font-size: 8em;
+            }
+            
+            .phrase-overlay {
+                font-size: 4em;
+                white-space: normal;
+                text-align: center;
+                padding: 0 20px;
+            }
+            
+            .shutter-overlay {
+                font-size: 4em;
+            }
+            
+            .score-overlay {
+                font-size: 1.3em;
+                padding: 8px 15px;
+                top: 15%;
+            }
+            
+            .fever-text {
+                font-size: 4em;
+            }
+            
+            .feedback-container {
+                top: 10px;
+                right: 10px;
+                font-size: 0.85em;
+            }
+            
+            .ball-counter {
+                top: 10px;
+                left: 10px;
+                padding: 10px 15px;
+                font-size: 1.3em;
+            }
+            
+            .detection-indicator {
+                padding: 8px;
+            }
+            
+            .confidence-bar {
+                width: 80px;
+            }
+            
+            .photo-item:hover {
+                transform: none;
+            }
+            
+            button:hover {
+                transform: scale(1.05);
+            }
+            
+            #video:hover {
+                transform: scaleX(-1);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="loadingScreen" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 99999;">
+        <div style="font-size: 3em; font-weight: 900; color: #fff; margin-bottom: 30px; text-shadow: 0 0 20px #f093fb;">🎮 Loading...</div>
+        <div style="width: 60%; max-width: 500px; height: 30px; background: rgba(255,255,255,0.2); border-radius: 15px; overflow: hidden; margin-bottom: 20px;">
+            <div id="loadingBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #f093fb 0%, #f5576c 50%, #ffd93d 100%); transition: width 0.3s; box-shadow: 0 0 20px rgba(240, 147, 251, 0.8);"></div>
+        </div>
+        <div id="loadingText" style="font-size: 1.2em; color: #6bcf7f; text-shadow: 2px 2px 4px rgba(0,0,0,0.5);">初期化中...</div>
+    </div>
+    
+    <canvas id="feverCanvas"></canvas>
+    <div id="fireworksCanvas"></div>
+    <div class="stars" id="stars"></div>
+    <div id="ballCounter" class="ball-counter">😊 × 0</div>
+    
+    <div class="container" style="display: none;">
+        <div class="instruction" id="instruction">📸 モデル読み込み中...</div>
+        <div style="position: relative; display: inline-block;">
+            <video id="video" autoplay></video>
+            <canvas id="faceCanvas"></canvas>
+            <div id="supportContainer" class="support-container"></div>
+        </div>
+        <div style="margin: 10px 0; font-size: 0.9em; color: #ffeb3b; text-shadow: 1px 1px 2px rgba(0,0,0,0.5);">
+            🔊 音が出ますのでご注意ください
+        </div>
+        
+        <!-- 顔検出フィードバック（非表示） -->
+        <div id="face-detection-feedback" class="feedback-container" style="display: none;">
+            <div id="detection-indicator" class="detection-indicator">
+                <span id="detection-status">顔検出準備中...</span>
+                <div id="detection-confidence" class="confidence-bar"></div>
+            </div>
+            <div id="detection-message" class="detection-message"></div>
+        </div>
+        
+        <div class="photos" id="photos"></div>
+        <div class="result" id="result"></div>
+        <button id="startBtn" onclick="startGame()" disabled>🚀 スタート！ 🚀</button>
+        <button id="retryBtn" onclick="retry()" style="display:none;">🔄 もう一回！ 🔄</button>
+        <div style="position: fixed; bottom: 10px; right: 10px; font-size: 0.7em; color: rgba(255,255,255,0.5); text-align: right;">
+            Voiceger: Zundamon
+        </div>
+    </div>
+
+    <script>
+        // キラキラ星を生成
+        const starsContainer = document.getElementById('stars');
+        for (let i = 0; i < 100; i++) {
+            const star = document.createElement('div');
+            star.className = 'star';
+            star.style.left = Math.random() * 100 + '%';
+            star.style.top = Math.random() * 100 + '%';
+            star.style.animationDelay = Math.random() * 3 + 's';
+            starsContainer.appendChild(star);
+        }
+        
+        const video = document.getElementById('video');
+        const faceCanvas = document.getElementById('faceCanvas');
+        const resultEl = document.getElementById('result');
+        const photosEl = document.getElementById('photos');
+        const startBtn = document.getElementById('startBtn');
+        const retryBtn = document.getElementById('retryBtn');
+        const instructionEl = document.getElementById('instruction');
+        let faceDetectionInterval = null;
+        
+        const phrases = ['ミッキー！', 'ラッキー！', 'ウィスキー！'];
+        let currentRound = 0;
+        let scores = [];
+        let photos = [];
+        let modelsLoaded = false;
+        let feverCount = 0;
+        let engine, world, canvas, feverBalls = [];
+        let fireworksInstance = null;
+
+        const emotionEmoji = {
+            'happy': '😊',
+            'sad': '😢',
+            'angry': '😠',
+            'surprised': '😮',
+            'fearful': '😨',
+            'disgusted': '🤢',
+            'neutral': '😐'
+        };
+        
+        const emotionNames = {
+            'happy': '幸福',
+            'sad': '悲しみ',
+            'angry': '怒り',
+            'surprised': '驚き',
+            'fearful': '恐怖',
+            'disgusted': '嫌悪',
+            'neutral': '無表情'
+        };
+
+        // 花火エフェクト（点数に応じた演出）
+        function fireFireworks(score) {
+            if (!score || score === 0) return;
+            console.log('🎆 花火発射！スコア:', score);
+            
+            const container = document.getElementById('fireworksCanvas');
+            if (!fireworksInstance) {
+                fireworksInstance = new Fireworks.Fireworks(container, {
+                    rocketsPoint: { min: 50, max: 50 },
+                    hue: { min: 0, max: 360 },
+                    delay: { min: 10, max: 20 },
+                    speed: 4,
+                    acceleration: 1.1,
+                    friction: 0.95,
+                    gravity: 1.5,
+                    particles: score === 100 ? 200 : 120,
+                    explosion: 8,
+                    intensity: score === 100 ? 80 : 50,
+                    autoresize: true
+                });
+            }
+            
+            const duration = score === 100 ? 4000 : 3000;
+            const launchCount = Math.ceil(score / 10);
+            
+            fireworksInstance.start();
+            
+            // 連続発射（大小の強弱付き）
+            for (let i = 0; i < launchCount; i++) {
+                setTimeout(() => {
+                    // 3発に1発は大きな花火
+                    const isLarge = i % 3 === 0;
+                    fireworksInstance.launch(isLarge ? 5 : 3);
+                }, i * 200);
+            }
+            
+            setTimeout(() => {
+                fireworksInstance.stop();
+            }, duration);
+        }
+        
+        // スターマイン（3連続フィーバー用）
+        function fireStarmine() {
+            const container = document.getElementById('fireworksCanvas');
+            if (!fireworksInstance) {
+                fireworksInstance = new Fireworks.Fireworks(container, {
+                    rocketsPoint: { min: 50, max: 50 },
+                    hue: { min: 0, max: 360 },
+                    delay: { min: 5, max: 15 },
+                    speed: 5,
+                    acceleration: 1.15,
+                    friction: 0.95,
+                    gravity: 1.5,
+                    particles: 250,
+                    explosion: 10,
+                    intensity: 100,
+                    autoresize: true
+                });
+            }
+            
+            fireworksInstance.start();
+            
+            // 大量連続発射（大中小の強弱付き）
+            for (let i = 0; i < 50; i++) {
+                setTimeout(() => {
+                    // 大中小の強弱
+                    const size = i % 5 === 0 ? 8 : (i % 3 === 0 ? 5 : 4);
+                    fireworksInstance.launch(size);
+                }, i * 80);
+            }
+            
+            // 花火を打ち上げ続ける
+            const launchInterval = setInterval(() => {
+                const size = Math.random() < 0.2 ? 10 : Math.random() < 0.5 ? 5 : 3;
+                fireworksInstance.launch(size);
+            }, 300);
+            
+            window.tripleFeverFireworks = launchInterval;
+        }
+        
+        // 紙吹雪エフェクト
+        function fireConfetti() {
+            const kirakira = new Audio('sounds/effect/kirakira.mp3');
+            kirakira.volume = 1.0;
+            kirakira.play().catch(() => {});
+            
+            const duration = 3000;
+            const end = Date.now() + duration;
+
+            (function frame() {
+                confetti({
+                    particleCount: 5,
+                    angle: 60,
+                    spread: 55,
+                    origin: { x: 0 },
+                    colors: ['#ff6b6b', '#ffd93d', '#6bcf7f', '#4d96ff', '#f093fb']
+                });
+                confetti({
+                    particleCount: 5,
+                    angle: 120,
+                    spread: 55,
+                    origin: { x: 1 },
+                    colors: ['#ff6b6b', '#ffd93d', '#6bcf7f', '#4d96ff', '#f093fb']
+                });
+
+                if (Date.now() < end) {
+                    requestAnimationFrame(frame);
+                }
+            }());
+        }
+
+        // キラキラエフェクト
+        function fireSparkles() {
+            confetti({
+                particleCount: 100,
+                spread: 70,
+                origin: { y: 0.6 },
+                colors: ['#ffd700', '#ffed4e', '#fff']
+            });
+        }
+        
+        // Matter.js初期化
+        function initPhysics() {
+            canvas = document.getElementById('feverCanvas');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            engine = Matter.Engine.create();
+            world = engine.world;
+            world.gravity.y = 1;
+            
+            // 床と壁を作成
+            const ground = Matter.Bodies.rectangle(canvas.width / 2, canvas.height + 25, canvas.width, 50, { isStatic: true });
+            const leftWall = Matter.Bodies.rectangle(-25, canvas.height / 2, 50, canvas.height, { isStatic: true });
+            const rightWall = Matter.Bodies.rectangle(canvas.width + 25, canvas.height / 2, 50, canvas.height, { isStatic: true });
+            
+            Matter.World.add(world, [ground, leftWall, rightWall]);
+        }
+        
+        // スコアに応じたボール数を計算
+        function calculateBallCount(score) {
+            if (score === 0) return 0;
+            if (score === 100) return 100; // 100点は100個
+            return Math.floor(score); // 1-99点はスコアと同じ数
+        }
+        
+        // 画面幅に応じたボールサイズを計算
+        function calculateBallSize() {
+            const width = window.innerWidth;
+            if (width <= 768) {
+                // スマホ: 小さめ
+                return { min: 15, max: 25 };
+            } else {
+                // PC: 通常サイズ
+                return { min: 30, max: 50 };
+            }
+        }
+        
+        // フィーバーエフェクト
+        function fireFever(imageData, score = 100) {
+            // カウンター表示
+            const counter = document.getElementById('ballCounter');
+            counter.style.display = 'block';
+            // FEVER!テキスト表示（100点の時のみ）
+            if (score === 100) {
+                const feverText = document.createElement('div');
+                feverText.className = 'fever-text';
+                feverText.textContent = '🔥 FEVER! 🔥';
+                document.body.appendChild(feverText);
+                setTimeout(() => feverText.remove(), 2000);
+            }
+            
+            // Canvas表示
+            canvas.style.display = 'block';
+            
+            // 画像をロード
+            const img = new Image();
+            img.src = imageData;
+            
+            // スコアに応じたボール数を計算
+            const ballCount = calculateBallCount(score);
+            const ballSize = calculateBallSize();
+            const interval = score === 100 ? 50 : 100; // 100点の場合は高速で降らせる
+            
+            for (let i = 0; i < ballCount; i++) {
+                setTimeout(() => {
+                    const x = Math.random() * canvas.width;
+                    const radius = ballSize.min + Math.random() * (ballSize.max - ballSize.min);
+                    const ball = Matter.Bodies.circle(x, -50, radius, {
+                        restitution: 0.6,
+                        friction: 0.1
+                    });
+                    ball.imageElement = img;
+                    Matter.World.add(world, ball);
+                    feverBalls.push(ball);
+                    
+                    const ballSound = new Audio(`sounds/ball/${Math.floor(Math.random() * 3) + 1}.mp3`);
+                    ballSound.volume = 0.5;
+                    ballSound.play().catch(() => {});
+                }, i * interval);
+            }
+            
+            // 物理エンジン開始（停止していた場合のみ再開）
+            if (!engine.runner) {
+                engine.runner = Matter.Runner.create();
+                Matter.Runner.run(engine.runner, engine);
+            }
+            // 描画ループが動いていない場合のみ開始
+            if (canvas.style.display === 'block') {
+                renderLoop();
+            }
+        }
+        
+        // ボールカウンター更新
+        let isCounterLocked = false;
+        
+        function updateBallCounter() {
+            if (isCounterLocked) return;
+            const counter = document.getElementById('ballCounter');
+            counter.textContent = `😊 × ${feverBalls.length}`;
+        }
+        
+        // カウンターを999までカウントアップして∞に
+        function animateCounterToInfinity() {
+            isCounterLocked = true; // カウンターをロック
+            const counter = document.getElementById('ballCounter');
+            const startCount = feverBalls.length;
+            const target = 999;
+            const duration = 5000; // 5秒で999まで
+            const startTime = Date.now();
+            
+            const animate = () => {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                
+                // イージング関数（加速）
+                const eased = progress * progress;
+                const count = Math.floor(startCount + (target - startCount) * eased);
+                
+                counter.textContent = `😊 × ${count}`;
+                
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    // 999に到達後、少し待って∞に
+                    setTimeout(() => {
+                        counter.textContent = '😊 × ∞';
+                        counter.style.fontSize = '2.5em';
+                    }, 500);
+                }
+            };
+            
+            animate();
+        }
+        
+        // 描画ループ
+        function renderLoop() {
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            updateBallCounter();
+            
+            feverBalls.forEach(ball => {
+                if (!ball.imageElement) return;
+                
+                ctx.save();
+                ctx.translate(ball.position.x, ball.position.y);
+                ctx.rotate(ball.angle);
+                
+                // 笑顔写真を円形にクリップして描画
+                ctx.beginPath();
+                ctx.arc(0, 0, ball.circleRadius, 0, Math.PI * 2);
+                ctx.clip();
+                
+                const size = ball.circleRadius * 2;
+                ctx.drawImage(ball.imageElement, -ball.circleRadius, -ball.circleRadius, size, size);
+                
+                ctx.restore();
+                
+                // 白い縁を描画
+                ctx.save();
+                ctx.translate(ball.position.x, ball.position.y);
+                ctx.beginPath();
+                ctx.arc(0, 0, ball.circleRadius, 0, Math.PI * 2);
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+                ctx.restore();
+            });
+            
+            if (canvas.style.display === 'block') {
+                requestAnimationFrame(renderLoop);
+            }
+        }
+        
+        // 3連続フィーバー
+        function fireTripleFever() {
+            const feverText = document.createElement('div');
+            feverText.className = 'fever-text';
+            feverText.textContent = '🎊 TRIPLE FEVER! 🎊';
+            feverText.style.fontSize = '8em';
+            document.body.appendChild(feverText);
+            setTimeout(() => feverText.remove(), 3000);
+            
+            // スターマインからの超巨大花火
+            fireStarmine();
+            
+            // 連続歓声ループ（10秒で停止）
+            const crowdInterval = setInterval(() => {
+                const effects = ['kansei.mp3', 'kanseitohakusyu.mp3', 'kiiroihimei.mp3', 'waaaaaaa.mp3'];
+                const crowd = new Audio(`sounds/effect/${effects[Math.floor(Math.random() * effects.length)]}`);
+                crowd.volume = 1.0;
+                crowd.play().catch(() => {});
+            }, 2000);
+            window.tripleFeverCrowd = crowdInterval;
+            
+            // 10秒後に歓声を停止
+            setTimeout(() => {
+                if (window.tripleFeverCrowd) {
+                    clearInterval(window.tripleFeverCrowd);
+                    window.tripleFeverCrowd = null;
+                }
+            }, 10000);
+            
+            // 画面いっぱいに笑顔ボールを降らせる
+            canvas.style.display = 'block';
+            
+            // 3枚の写真すべてを使用
+            photos.forEach((photo, photoIndex) => {
+                const img = new Image();
+                img.src = photo.image;
+                
+                // 1写真あたり100個のボール（合計300個）
+                const ballSize = calculateBallSize();
+                const totalBalls = 100;
+                
+                for (let i = 0; i < totalBalls; i++) {
+                    setTimeout(() => {
+                        const x = Math.random() * canvas.width;
+                        const radius = ballSize.min + Math.random() * (ballSize.max - ballSize.min);
+                        const ball = Matter.Bodies.circle(x, -50 - Math.random() * 200, radius, {
+                            restitution: 0.7,
+                            friction: 0.05
+                        });
+                        ball.imageElement = img;
+                        Matter.World.add(world, ball);
+                        feverBalls.push(ball);
+                        
+                        const ballSound = new Audio(`sounds/ball/${Math.floor(Math.random() * 3) + 1}.mp3`);
+                        ballSound.volume = 0.5;
+                        ballSound.play().catch(() => {});
+                    }, photoIndex * 2000 + i * 30); // 写真ごとに時間差、高速で降らせる
+                }
+            });
+            
+            // 物理エンジン開始
+            if (!engine.runner) {
+                engine.runner = Matter.Runner.create();
+                Matter.Runner.run(engine.runner, engine);
+            }
+            if (canvas.style.display === 'block') {
+                renderLoop();
+            }
+        }
+
+        // 顔検出バリデーション機能のグローバル変数
+        let faceDetectionController = null;
+
+        async function loadModels() {
+            if (modelsLoaded) return;
+        }
+
+        // 顔検出バリデーション機能の初期化（簡素化）
+        async function initializeFaceDetectionValidation() {
+            try {
+                const { FaceDetectionController } = window.faceDetectionModule;
+                
+                // 簡素化されたゲーム制御コールバック
+                const gameCallbacks = {
+                    onGameBlock: (reason) => {
+                        console.log('ゲーム開始ブロック:', reason);
+                    }
+                };
+                
+                // 統合コントローラーを初期化（フィードバックコンテナは不要）
+                faceDetectionController = new FaceDetectionController(
+                    video, 
+                    null, 
+                    gameCallbacks
+                );
+                
+                // 初期化と開始（エラーでも続行）
+                await faceDetectionController.initialize();
+                await faceDetectionController.start();
+                
+                console.log('顔検出バリデーション機能初期化完了');
+            } catch (error) {
+                console.error('顔検出バリデーション初期化エラー:', error);
+                // エラーでも続行（ゲームは動作する）
+                faceDetectionController = null;
+            }
+        }
+
+        // 音声ファイルプリロード
+        const audioCache = {};
+        async function preloadAudio(onProgress) {
+            const essentialFiles = [
+                'sounds/bgm/bgm.mp3',
+                'sounds/camera/kasya.mp3',
+                'sounds/count/1.wav', 'sounds/count/2.wav', 'sounds/count/3.wav',
+                'sounds/effect/horn.mp3', 'sounds/effect/kansei.mp3', 'sounds/effect/kanseitohakusyu.mp3',
+                'sounds/effect/kiiroihimei.mp3', 'sounds/effect/waaaaaaa.mp3', 'sounds/effect/kirakira.mp3',
+                'sounds/ball/1.mp3', 'sounds/ball/2.mp3', 'sounds/ball/3.mp3'
+            ];
+            
+            const voiceFiles = [];
+            for (let i = 1; i <= 344; i += 8) {
+                voiceFiles.push(`sounds/voice/voice_${String(i).padStart(3, '0')}.wav`);
+            }
+            
+            const allFiles = [...essentialFiles, ...voiceFiles];
+            let loaded = 0;
+            
+            for (const file of allFiles) {
+                await new Promise((resolve) => {
+                    const audio = new Audio(file);
+                    audio.volume = file.includes('voice') ? 0.7 : 1.0;
+                    audio.addEventListener('canplaythrough', () => {
+                        audioCache[file] = audio;
+                        loaded++;
+                        if (onProgress) onProgress(loaded, allFiles.length);
+                        resolve();
+                    }, { once: true });
+                    audio.addEventListener('error', () => {
+                        loaded++;
+                        if (onProgress) onProgress(loaded, allFiles.length);
+                        resolve();
+                    }, { once: true });
+                });
+            }
+        }
+
+        // BGM再生
+        const bgm = new Audio('sounds/bgm/bgm.mp3');
+        bgm.loop = true;
+        bgm.volume = 0.3;
+
+        // フィーバー効果音再生
+        function playReggaeHorn(count) {
+            const effects = ['horn.mp3', 'kansei.mp3', 'kanseitohakusyu.mp3', 'kiiroihimei.mp3', 'waaaaaaa.mp3', 'kirakira.mp3'];
+            const hornCount = count === 1 ? 8 : count === 2 ? 12 : 20;
+            
+            for (let i = 0; i < hornCount; i++) {
+                setTimeout(() => {
+                    const horn = new Audio('sounds/effect/horn.mp3');
+                    horn.volume = 0.5;
+                    horn.play().catch(() => {});
+                    
+                    const effect = new Audio(`sounds/effect/${effects[Math.floor(Math.random() * effects.length)]}`);
+                    effect.volume = 1.0;
+                    effect.play().catch(() => {});
+                }, i * 80);
+            }
+            
+            if (count === 3) {
+                setTimeout(() => {
+                    for (let i = 0; i < 15; i++) {
+                        setTimeout(() => {
+                            const horn = new Audio('sounds/effect/horn.mp3');
+                            horn.volume = 0.5;
+                            horn.play().catch(() => {});
+                            
+                            const effect = new Audio(`sounds/effect/${effects[Math.floor(Math.random() * effects.length)]}`);
+                            effect.volume = 1.0;
+                            effect.play().catch(() => {});
+                        }, i * 80);
+                    }
+                }, 2000);
+            }
+        }
+
+        window.addEventListener('load', async () => {
+            const loadingScreen = document.getElementById('loadingScreen');
+            const loadingBar = document.getElementById('loadingBar');
+            const loadingText = document.getElementById('loadingText');
+            const container = document.querySelector('.container');
+            
+            try {
+                loadingText.textContent = '📹 カメラにアクセス中...';
+                
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('お使いのブラウザはカメラアクセスに対応していません。Chrome、Firefox、Edgeなどの最新ブラウザをお使いください。');
+                }
+                
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        facingMode: 'user'
+                    } 
+                });
+                video.srcObject = stream;
+                await new Promise(resolve => video.onloadedmetadata = resolve);
+                loadingBar.style.width = '10%';
+                
+                loadingText.textContent = '📦 AIモデル読み込み中...';
+                const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model';
+                await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+                await faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL);
+                await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+                modelsLoaded = true;
+                await initializeFaceDetectionValidation();
+                loadingBar.style.width = '30%';
+                
+                if (typeof EmotionSupportManager !== 'undefined') {
+                    window.emotionSupportManager = new EmotionSupportManager();
+                    window.emotionSupportManager.initialize();
+                }
+                
+                loadingText.textContent = '🎵 音声ファイル読み込み中...';
+                await preloadAudio((loaded, total) => {
+                    const progress = 30 + (loaded / total) * 70;
+                    loadingBar.style.width = progress + '%';
+                    loadingText.textContent = `🎵 音声ファイル読み込み中... (${loaded}/${total})`;
+                });
+                
+                loadingBar.style.width = '100%';
+                loadingText.textContent = '✨ 読み込み完了！';
+                
+                await new Promise(resolve => setTimeout(resolve, 500));
+                loadingScreen.style.display = 'none';
+                container.style.display = 'flex';
+                instructionEl.textContent = '👤 カメラに顔を映してください';
+                startBtn.disabled = true;
+                
+                // 顔検出監視を開始
+                startFaceDetection();
+            } catch (err) {
+                console.error('初期化エラー:', err);
+                let errorMessage = '⚠️ エラー: ';
+                
+                if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+                    errorMessage += 'カメラの使用が許可されていません。';
+                } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+                    errorMessage += 'カメラが見つかりません。';
+                } else if (err.name === 'NotReadableError' || err.name === 'TrackStartError') {
+                    errorMessage += 'カメラが他のアプリで使用中です。';
+                } else if (err.name === 'SecurityError') {
+                    errorMessage += 'HTTPSまたはlocalhostでアクセスしてください。';
+                } else {
+                    errorMessage += err.message || '不明なエラーが発生しました。';
+                }
+                
+                loadingText.innerHTML = errorMessage;
+                loadingBar.style.width = '100%';
+                loadingBar.style.background = 'linear-gradient(90deg, #ff6b6b 0%, #ff0000 100%)';
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                loadingScreen.style.display = 'none';
+                container.style.display = 'flex';
+                instructionEl.innerHTML = errorMessage;
+                startBtn.disabled = false;
+            }
+        });
+
+        // 顔の輪郭線を描画
+        async function drawFaceBox(detection) {
+            // videoの表示サイズを取得
+            const displaySize = { 
+                width: video.offsetWidth, 
+                height: video.offsetHeight 
+            };
+            faceCanvas.width = displaySize.width;
+            faceCanvas.height = displaySize.height;
+            
+            // スケール比率を計算
+            const scaleX = displaySize.width / video.videoWidth;
+            const scaleY = displaySize.height / video.videoHeight;
+            
+            const ctx = faceCanvas.getContext('2d');
+            ctx.clearRect(0, 0, faceCanvas.width, faceCanvas.height);
+            
+            if (detection) {
+                // ランドマークを取得
+                const landmarks = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({
+                    inputSize: 416,
+                    scoreThreshold: 0.3
+                })).withFaceLandmarks();
+                
+                if (landmarks && landmarks.landmarks) {
+                    const points = landmarks.landmarks.positions;
+                    
+                    // 顔の輪郭を描画（顔の外周のみ）
+                    ctx.strokeStyle = '#00ff00';
+                    ctx.lineWidth = 3;
+                    ctx.shadowColor = '#00ff00';
+                    ctx.shadowBlur = 10;
+                    ctx.lineCap = 'round';
+                    ctx.lineJoin = 'round';
+                    
+                    // 顔の輪郭（0-16番）をスケール調整して描画
+                    ctx.beginPath();
+                    for (let i = 0; i <= 16; i++) {
+                        const point = points[i];
+                        const x = point.x * scaleX;
+                        const y = point.y * scaleY;
+                        if (i === 0) {
+                            ctx.moveTo(x, y);
+                        } else {
+                            ctx.lineTo(x, y);
+                        }
+                    }
+                    ctx.stroke();
+                    
+                    ctx.shadowBlur = 0;
+                }
+            }
+        }
+        
+        // リアルタイム顔検出
+        let isGameActive = false;
+        
+        async function startFaceDetection() {
+            if (faceDetectionInterval) return;
+            
+            faceDetectionInterval = setInterval(async () => {
+                const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({
+                    inputSize: 416,
+                    scoreThreshold: 0.3
+                })).withFaceExpressions();
+                drawFaceBox(detection);
+                
+                // スタートボタンの有効/無効を制御
+                if (startBtn.style.display !== 'none') {
+                    if (detection) {
+                        startBtn.disabled = false;
+                        instructionEl.textContent = '✨ 準備完了！カメラに顔を映して「スタート」を押してね！ ✨';
+                    } else {
+                        startBtn.disabled = true;
+                        instructionEl.textContent = '👤 カメラに顔を映してください';
+                    }
+                }
+                
+                // 感情サポート処理（ゲーム中のみ）
+                if (isGameActive && window.emotionSupportManager) {
+                    window.emotionSupportManager.processEmotion(detection);
+                }
+            }, 100);
+        }
+        
+        function stopFaceDetection() {
+            if (faceDetectionInterval) {
+                clearInterval(faceDetectionInterval);
+                faceDetectionInterval = null;
+                const ctx = faceCanvas.getContext('2d');
+                ctx.clearRect(0, 0, faceCanvas.width, faceCanvas.height);
+            }
+        }
+
+        async function detectExpression() {
+            const detection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({
+                inputSize: 416,
+                scoreThreshold: 0.3
+            })).withFaceExpressions();
+            
+            if (!detection) {
+                return null;
+            }
+
+            const expressions = detection.expressions;
+            const emotions = {
+                happy: expressions.happy * 100,
+                sad: expressions.sad * 100,
+                angry: expressions.angry * 100,
+                surprised: expressions.surprised * 100,
+                fearful: expressions.fearful * 100,
+                disgusted: expressions.disgusted * 100,
+                neutral: expressions.neutral * 100
+            };
+
+            const dominant = Object.entries(emotions).reduce((a, b) => a[1] > b[1] ? a : b)[0];
+            
+            // ランドマーク検出を別途実行
+            let mouthOpenRatio = 0;
+            let smileRatio = 0;
+            try {
+                const landmarkDetection = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({
+                    inputSize: 416,
+                    scoreThreshold: 0.3
+                })).withFaceLandmarks();
+                
+                if (landmarkDetection && landmarkDetection.landmarks) {
+                    const landmarks = landmarkDetection.landmarks;
+                    
+                    // 口の開き具合
+                    const upperLip = landmarks.positions[51];
+                    const lowerLip = landmarks.positions[57];
+                    const mouthOpen = Math.abs(lowerLip.y - upperLip.y);
+                    const faceHeight = Math.abs(landmarks.positions[8].y - landmarks.positions[27].y);
+                    mouthOpenRatio = mouthOpen / faceHeight;
+                    
+                    // 口角の上がり具合（口角と口の下端を比較）
+                    const leftCorner = landmarks.positions[48]; // 左口角
+                    const rightCorner = landmarks.positions[54]; // 右口角
+                    
+                    // 口角が下唇より上にあるほど笑顔
+                    const leftLift = Math.max(0, lowerLip.y - leftCorner.y);
+                    const rightLift = Math.max(0, lowerLip.y - rightCorner.y);
+                    const avgLift = (leftLift + rightLift) / 2;
+                    smileRatio = avgLift / faceHeight;
+                }
+            } catch (e) {
+                console.warn('ランドマーク検出スキップ:', e);
+            }
+            
+            // スコア計算: 幸福度60% + 口の開き具合20% + 口角の上がり具合20%
+            const happyScore = emotions.happy * 0.6;
+            const mouthScore = Math.min(20, mouthOpenRatio * 100);
+            const smileScore = Math.min(20, smileRatio * 200);
+            let score = Math.round(happyScore + mouthScore + smileScore);
+            score = Math.max(0, Math.min(100, score));
+            
+            console.log(`Happy: ${emotions.happy.toFixed(1)}%, Mouth: ${(mouthOpenRatio * 100).toFixed(1)}%, Smile: ${(smileRatio * 100).toFixed(1)}%, Score: ${score}`);
+
+            return { emotions, dominant, score, mouthOpenRatio, smileRatio };
+        }
+
+        async function captureAndDetect() {
+            const maxRetries = 3;
+            let result = null;
+            
+            // リトライ機能：最大3回まで顔検出を試行
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+                result = await detectExpression();
+                if (result) break;
+                
+                console.warn(`顔検出失敗 (${attempt + 1}/${maxRetries})、再試行中...`);
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            
+            // 検出結果取得後、即座に画像キャプチャ
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const imageData = canvas.toDataURL('image/jpeg');
+            
+            if (!result) {
+                console.warn('顔が検出されませんでした（3回試行後）');
+                return { 
+                    score: 0, 
+                    image: imageData,
+                    emotions: {},
+                    dominant: 'neutral',
+                    mouthOpenRatio: 0,
+                    smileRatio: 0
+                };
+            }
+
+            return { 
+                score: result.score, 
+                image: imageData,
+                emotions: result.emotions,
+                dominant: result.dominant,
+                mouthOpenRatio: result.mouthOpenRatio,
+                smileRatio: result.smileRatio
+            };
+        }
+
+        async function gameLoop() {
+            for (let i = 0; i < 3; i++) {
+                currentRound = i;
+                
+                // 掛け声を大きなオーバーレイで表示（ドン表示）
+                const phraseOverlay = document.createElement('div');
+                phraseOverlay.className = 'phrase-overlay';
+                phraseOverlay.textContent = phrases[i];
+                document.body.appendChild(phraseOverlay);
+                setTimeout(() => phraseOverlay.remove(), 2000); // ドン表示は2秒
+                
+                fireSparkles();
+                
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                // カウントダウン
+                for (let count = 3; count > 0; count--) {
+                    // 最前面に大きく表示
+                    const countdownEl = document.createElement('div');
+                    countdownEl.className = 'countdown-overlay';
+                    countdownEl.textContent = count;
+                    document.body.appendChild(countdownEl);
+                    setTimeout(() => countdownEl.remove(), 500);
+                    
+                    const countSound = new Audio(`sounds/count/${count}.wav`);
+                    countSound.volume = 1.0;
+                    countSound.play().catch(() => {});
+                    
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+                
+                // 撮影！を大きなオーバーレイで表示
+                const shutterOverlay = document.createElement('div');
+                shutterOverlay.className = 'shutter-overlay';
+                shutterOverlay.textContent = 'パシャ！📸';
+                document.body.appendChild(shutterOverlay);
+                setTimeout(() => shutterOverlay.remove(), 800);
+                
+                const shutter = new Audio('sounds/camera/kasya.mp3');
+                shutter.volume = 1.0;
+                shutter.play().catch(() => {});
+                
+                const result = await captureAndDetect();
+                
+                scores.push(result.score);
+                photos.push({ 
+                    phrase: phrases[i], 
+                    image: result.image, 
+                    score: result.score,
+                    dominant: result.dominant,
+                    emotions: result.emotions,
+                    mouthOpenRatio: result.mouthOpenRatio || 0,
+                    smileRatio: result.smileRatio || 0
+                });
+                
+                // スコア表示オーバーレイ
+                const scoreOverlay = document.createElement('div');
+                scoreOverlay.className = 'score-overlay';
+                scoreOverlay.textContent = `${phrases[i]} - スコア: ${result.score}`;
+                document.body.appendChild(scoreOverlay);
+                setTimeout(() => scoreOverlay.remove(), 2000);
+                
+                // スコアに応じてボールと花火を落とす
+                if (result.score === 100) {
+                    feverCount++;
+                    playReggaeHorn(feverCount);
+                }
+                fireFever(result.image, result.score);
+                fireFireworks(result.score);
+                await new Promise(resolve => setTimeout(resolve, result.score === 100 ? 3000 : 2000));
+            }
+            
+            stopFaceDetection();
+            showResult();
+        }
+
+        async function startGame() {
+            // BGM開始
+            bgm.play().catch(() => {});
+            
+            // カメラアクセスを確認
+            if (!video.srcObject) {
+                try {
+                    instructionEl.textContent = '📹 カメラにアクセス中...';
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    video.srcObject = stream;
+                    await new Promise(resolve => video.onloadedmetadata = resolve);
+                    instructionEl.textContent = '✨ カメラ準備完了！';
+                } catch (err) {
+                    alert('カメラにアクセスできません: ' + err.message);
+                    instructionEl.textContent = '❌ カメラアクセスエラー';
+                    return;
+                }
+            }
+            
+            if (!modelsLoaded) {
+                try {
+                    instructionEl.textContent = '📦 モデル読み込み中...';
+                    await loadModels();
+                } catch (error) {
+                    console.error('モデル読み込みエラー:', error);
+                    // モデル読み込みエラーでもゲームは続行
+                }
+            }
+            
+            // 顔検出バリデーションをチェック（エラーでも続行）
+            try {
+                if (faceDetectionController) {
+                    await faceDetectionController.validateGameStart();
+                }
+            } catch (error) {
+                console.log('顔検出バリデーション:', error.message);
+                // エラーでもゲームを続行
+            }
+            
+            // 物理エンジン初期化
+            if (!engine) {
+                initPhysics();
+            }
+            
+            // 前回のボールをクリア
+            feverBalls.forEach(ball => Matter.World.remove(world, ball));
+            feverBalls = [];
+            canvas.style.display = 'none';
+            
+            // ゲーム状態をリセット
+            currentRound = 0;
+            scores = [];
+            photos = [];
+            feverCount = 0;
+            resultEl.textContent = '';
+            photosEl.innerHTML = '';
+            instructionEl.textContent = '😊 掛け声に合わせて最高の笑顔を見せてね！ 😊';
+            startBtn.style.display = 'none';
+            retryBtn.style.display = 'none';
+            video.style.display = 'block';
+            
+            // ゲームアクティブ状態を設定
+            if (faceDetectionController) {
+                faceDetectionController.setGameActive(true);
+            }
+            
+            // 応援機能を開始（ゲーム中フラグをON）
+            isGameActive = true;
+            if (window.emotionSupportManager) {
+                window.emotionSupportManager.reset();
+            }
+            
+            fireConfetti();
+            gameLoop();
+        }
+
+        function showResult() {
+            stopFaceDetection();
+            
+            // カウンターは表示したまま（結果画面でも表示）
+            const counter = document.getElementById('ballCounter');
+            counter.style.display = 'block';
+            
+            // ゲーム中フラグをOFF
+            isGameActive = false;
+            
+            // ゲームアクティブ状態を無効化
+            if (faceDetectionController) {
+                faceDetectionController.setGameActive(false);
+            }
+            
+            // 感情サポートを停止
+            if (window.emotionSupportManager) {
+                window.emotionSupportManager.stop();
+            }
+            
+            // 応援メッセージコンテナをクリア
+            const supportContainer = document.getElementById('supportContainer');
+            if (supportContainer) {
+                supportContainer.innerHTML = '';
+                supportContainer.style.display = 'none';
+            }
+            
+            video.style.display = 'none';
+            faceCanvas.style.display = 'none';
+            instructionEl.textContent = '';
+            
+            // 3連続フィーバーチェック
+            if (feverCount === 3) {
+                fireTripleFever();
+                // カウンターを999まで高速カウントアップして∞に
+                animateCounterToInfinity();
+            }
+            
+            const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+            let message = avg >= 80 ? 'Excellent! 🎉🎊🌟' : avg >= 60 ? 'Good! 😊👍✨' : 'Try Again! 💪🔥';
+            
+            if (feverCount === 3) {
+                message = '🎊 TRIPLE FEVER達成！ 🎊<br>完璧な笑顔です！';
+            }
+            
+            resultEl.innerHTML = `平均スコア: ${avg.toFixed(1)}<br>${message}`;
+            
+            if (feverCount === 3) {
+                // 3連続フィーバーは専用演出
+            } else if (avg >= 80) {
+                fireConfetti();
+                fireFireworks(Math.round(avg));
+            } else {
+                fireSparkles();
+            }
+            
+            photosEl.innerHTML = photos.map((p, index) => {
+                console.log('Photo data:', p); // デバッグ用
+                const emotionBars = Object.entries(p.emotions)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([emotion, value]) => `
+                        <div class="emotion-bar">
+                            <div class="name">${emotionEmoji[emotion]} ${emotionNames[emotion]}</div>
+                            <div class="bar"><div class="fill" style="width: ${value}%"></div></div>
+                            <div class="value">${value.toFixed(1)}%</div>
+                        </div>
+                    `).join('');
+                
+                // ボーナス加点（口の開き具合 + 口角の上がり具合）
+                const mouthScore = Math.min(20, p.mouthOpenRatio * 100);
+                const smileScore = Math.min(20, p.smileRatio * 200);
+                const secretBonus = Math.round(mouthScore + smileScore);
+                const additionalMetrics = `
+                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.3);">
+                        <div style="margin: 5px 0;">🎁 ボーナス加点: +${secretBonus}点</div>
+                    </div>
+                `;
+                
+                return `
+                    <div class="photo-item" style="animation-delay: ${index * 0.2}s">
+                        <img src="${p.image}" alt="${p.phrase}">
+                        <div class="label">
+                            <strong>${p.phrase}</strong><br>
+                            ${emotionEmoji[p.dominant]} ${emotionNames[p.dominant]} - スコア: ${p.score}
+                        </div>
+                        <div class="emotion-details">
+                            ${emotionBars}
+                            ${additionalMetrics}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            retryBtn.style.display = 'inline-block';
+        }
+
+        function retry() {
+            // 花火を停止
+            if (window.tripleFeverFireworks) {
+                clearInterval(window.tripleFeverFireworks);
+                window.tripleFeverFireworks = null;
+                if (fireworksInstance) fireworksInstance.stop();
+            }
+            
+            // 歓声を停止
+            if (window.tripleFeverCrowd) {
+                clearInterval(window.tripleFeverCrowd);
+                window.tripleFeverCrowd = null;
+            }
+            
+            // ボールをクリア
+            feverBalls.forEach(ball => Matter.World.remove(world, ball));
+            feverBalls = [];
+            canvas.style.display = 'none';
+            
+            // カウンター非表示とロック解除
+            const counter = document.getElementById('ballCounter');
+            counter.style.display = 'none';
+            counter.style.fontSize = '2em';
+            isCounterLocked = false;
+            
+            // ゲーム中フラグをOFF
+            isGameActive = false;
+            
+            // 感情サポートをリセット
+            if (window.emotionSupportManager) {
+                window.emotionSupportManager.reset();
+            }
+            
+            // 応援メッセージコンテナをクリア
+            const supportContainer = document.getElementById('supportContainer');
+            if (supportContainer) {
+                supportContainer.innerHTML = '';
+                supportContainer.style.display = 'none';
+            }
+            
+            // 顔検出バリデーション機能をリセット
+            if (faceDetectionController) {
+                faceDetectionController.setGameActive(false);
+            }
+            
+            // UI状態をリセット
+            retryBtn.style.display = 'none';
+            startBtn.style.display = 'inline-block';
+            startBtn.disabled = true;
+            video.style.display = 'block';
+            resultEl.textContent = '';
+            photosEl.innerHTML = '';
+            instructionEl.textContent = '👤 カメラに顔を映してください';
+            
+            // 顔検出監視を再開
+            startFaceDetection();
+            fireSparkles();
+        }
+    </script>
+</body>
+</html>

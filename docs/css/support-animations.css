@@ -1,0 +1,132 @@
+/* Support Animations CSS */
+
+.support-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 100;
+}
+
+.support-message {
+    position: absolute;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 20px;
+    padding: 6px 10px;        /* パディングをさらに小さく */
+    font-size: 10px;          /* デフォルトサイズをさらに小さく */
+    font-weight: bold;
+    color: #333;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    z-index: 1000;
+    pointer-events: none;
+    border: 2px solid rgba(255, 215, 0, 0.6);
+    will-change: transform, opacity; /* GPU加速 */
+    backface-visibility: hidden; /* 60fps最適化 */
+    max-width: 180px;         /* 最大幅をさらに制限 */
+    word-wrap: break-word;    /* 長いテキストの折り返し */
+}
+
+/* Intensity-based styling */
+.support-message[data-intensity="high"] {
+    font-size: 12px;          /* highをさらに小さく */
+    padding: 8px 12px;        /* パディングをさらに小さく */
+    box-shadow: 0 6px 20px rgba(255, 215, 0, 0.5);
+    border: 3px solid rgba(255, 215, 0, 0.8);
+}
+
+.support-message[data-intensity="low"] {
+    font-size: 8px;           /* lowをさらに小さく */
+    padding: 4px 8px;         /* パディングをさらに小さく */
+    opacity: 0.9;
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+    .support-message {
+        font-size: 8px;          /* モバイルでさらに小さく */
+        padding: 4px 8px;        /* パディングをさらに小さく */
+        max-width: 120px;        /* モバイルでは幅をさらに制限 */
+    }
+    
+    .support-message[data-intensity="high"] {
+        font-size: 10px;         /* モバイルhighもさらに小さく */
+        padding: 6px 10px;       /* パディングをさらに小さく */
+    }
+    
+    .support-message[data-intensity="low"] {
+        font-size: 7px;          /* モバイルlowはさらに小さく */
+        padding: 3px 6px;        /* パディングをさらに小さく */
+    }
+}
+
+/* Base Animations - GPU加速のためtransformとopacityのみ使用 */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-30px) scale(0.8) translateZ(0);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1) translateZ(0);
+    }
+}
+
+@keyframes bounce {
+    0%, 20%, 50%, 80%, 100% {
+        transform: translateY(0) scale(1) translateZ(0);
+    }
+    10% {
+        transform: translateY(-8px) scale(1.05) translateZ(0);
+    }
+    40% {
+        transform: translateY(-15px) scale(1.1) translateZ(0);
+    }
+    60% {
+        transform: translateY(-8px) scale(1.05) translateZ(0);
+    }
+}
+
+@keyframes bounceHigh {
+    0%, 20%, 50%, 80%, 100% {
+        transform: translateY(0) scale(1) translateZ(0);
+    }
+    10% {
+        transform: translateY(-12px) scale(1.08) translateZ(0);
+    }
+    40% {
+        transform: translateY(-25px) scale(1.15) translateZ(0);
+    }
+    60% {
+        transform: translateY(-12px) scale(1.08) translateZ(0);
+    }
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+        transform: scale(1) translateZ(0);
+    }
+    to {
+        opacity: 0;
+        transform: scale(0.9) translateZ(0);
+    }
+}
+
+/* Animation Classes */
+.support-message.slide {
+    animation: slideIn 0.4s ease-out;
+}
+
+.support-message.bounce {
+    animation: bounce 0.8s ease-in-out;
+}
+
+.support-message.bounce[data-intensity="high"] {
+    animation: bounceHigh 1s ease-in-out;
+}
+
+.support-message.fade-out {
+    animation: fadeOut 0.3s ease-in forwards;
+}

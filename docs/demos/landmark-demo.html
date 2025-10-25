@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Permissions-Policy" content="camera=*, microphone=*">
+    <title>68点ランドマークリアルタイム検出</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        h1 {
+            margin-bottom: 20px;
+        }
+        #container {
+            position: relative;
+            display: inline-block;
+            line-height: 0;
+        }
+        #video {
+            width: 640px;
+            height: 480px;
+            transform: scaleX(-1);
+        }
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            transform: scaleX(-1);
+        }
+        #controls {
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin: 0 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        #status {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #aaa;
+        }
+        .legend {
+            margin-top: 20px;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+    <h1>face-api.js 68点ランドマークリアルタイム検出</h1>
+    
+    <div id="controls">
+        <button id="startBtn" onclick="startVideo()">カメラ開始</button>
+        <button id="stopBtn" onclick="stopVideo()" disabled>停止</button>
+    </div>
+    
+    <div id="status">モデル読み込み中...</div>
+    
+    <div id="container">
+        <video id="video" autoplay muted></video>
+        <canvas id="overlay"></canvas>
+    </div>
+
+    <div class="legend">
+        <div class="legend-item">
+            <div class="legend-dot" style="background: #60a5fa;"></div>
+            <span>輪郭 (0-16)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot" style="background: #34d399;"></div>
+            <span>眉 (17-26)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot" style="background: #f59e0b;"></div>
+            <span>鼻 (27-35)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot" style="background: #8b5cf6;"></div>
+            <span>目 (36-47)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-dot" style="background: #ec4899;"></div>
+            <span>唇 (48-67)</span>
+        </div>
+    </div>
+
+    <script>
+        let modelsLoaded = false;
+        let stream = null;
+        let detectionInterval = null;
+
+        async function loadModels() {
+            const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+            await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+            await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+            modelsLoaded = true;
+            document.getElementById('status').textContent = 'モデル読み込み完了！「カメラ開始」をクリックしてください。';
+        }
+
+        async function startVideo() {
+            if (!modelsLoaded) {
+                alert('モデルがまだ読み込まれていません。');
+                return;
+            }
+
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 640, height: 480 } 
+                });
+                const video = document.getElementById('video');
+                video.srcObject = stream;
+                
+                video.addEventListener('loadedmetadata', () => {
+                    const canvas = document.getElementById('overlay');
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    canvas.style.width = '640px';
+                    canvas.style.height = '480px';
+                    
+                    document.getElementById('startBtn').disabled = true;
+                    document.getElementById('stopBtn').disabled = false;
+                    document.getElementById('status').textContent = 'リアルタイム検出中...';
+                    
+                    detectLandmarksRealtime();
+                });
+            } catch (err) {
+                alert('カメラのアクセスに失敗しました: ' + err.message);
+            }
+        }
+
+        function stopVideo() {
+            if (detectionInterval) {
+                clearInterval(detectionInterval);
+                detectionInterval = null;
+            }
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            const canvas = document.getElementById('overlay');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('status').textContent = '停止しました。';
+        }
+
+        async function detectLandmarksRealtime() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('overlay');
+            
+            detectionInterval = setInterval(async () => {
+                const detection = await faceapi
+                    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                    .withFaceLandmarks();
+
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                if (detection) {
+                    drawLandmarks(detection.landmarks);
+                }
+            }, 100);
+        }
+
+        function drawLandmarks(landmarks) {
+            const canvas = document.getElementById('overlay');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const positions = landmarks.positions;
+
+            const parts = [
+                { range: [0, 16], color: '#60a5fa' },
+                { range: [17, 26], color: '#34d399' },
+                { range: [27, 35], color: '#f59e0b' },
+                { range: [36, 47], color: '#8b5cf6' },
+                { range: [48, 67], color: '#ec4899' }
+            ];
+
+            parts.forEach(part => {
+                ctx.fillStyle = part.color;
+                ctx.strokeStyle = part.color;
+                ctx.lineWidth = 2;
+
+                for (let i = part.range[0]; i <= part.range[1]; i++) {
+                    const point = positions[i];
+                    ctx.beginPath();
+                    ctx.arc(point.x, point.y, 4, 0, 2 * Math.PI);
+                    ctx.fill();
+
+                    ctx.font = '10px Arial';
+                    ctx.fillText(i, point.x + 6, point.y - 6);
+                }
+
+                if (part.range[0] <= 16) {
+                    ctx.beginPath();
+                    for (let i = part.range[0]; i <= part.range[1]; i++) {
+                        const point = positions[i];
+                        if (i === part.range[0]) ctx.moveTo(point.x, point.y);
+                        else ctx.lineTo(point.x, point.y);
+                    }
+                    ctx.stroke();
+                } else if (part.range[0] === 17 || part.range[0] === 22) {
+                    ctx.beginPath();
+                    for (let i = part.range[0]; i <= part.range[1]; i++) {
+                        const point = positions[i];
+                        if (i === part.range[0]) ctx.moveTo(point.x, point.y);
+                        else ctx.lineTo(point.x, point.y);
+                    }
+                    ctx.stroke();
+                } else if (part.range[0] === 27) {
+                    ctx.beginPath();
+                    for (let i = 27; i <= 30; i++) {
+                        const point = positions[i];
+                        if (i === 27) ctx.moveTo(point.x, point.y);
+                        else ctx.lineTo(point.x, point.y);
+                    }
+                    ctx.stroke();
+                    ctx.beginPath();
+                    for (let i = 31; i <= 35; i++) {
+                        const point = positions[i];
+                        if (i === 31) ctx.moveTo(point.x, point.y);
+                        else ctx.lineTo(point.x, point.y);
+                    }
+                    ctx.closePath();
+                    ctx.stroke();
+                } else if (part.range[0] === 36 || part.range[0] === 42) {
+                    ctx.beginPath();
+                    for (let i = part.range[0]; i <= part.range[1]; i++) {
+                        const point = positions[i];
+                        if (i === part.range[0]) ctx.moveTo(point.x, point.y);
+                        else ctx.lineTo(point.x, point.y);
+                    }
+                    ctx.closePath();
+                    ctx.stroke();
+                } else if (part.range[0] === 48) {
+                    ctx.beginPath();
+                    for (let i = 48; i <= 59; i++) {
+                        const point = positions[i];
+                        if (i === 48) ctx.moveTo(point.x, point.y);
+                        else ctx.lineTo(point.x, point.y);
+                    }
+                    ctx.closePath();
+                    ctx.stroke();
+                    ctx.beginPath();
+                    for (let i = 60; i <= 67; i++) {
+                        const point = positions[i];
+                        if (i === 60) ctx.moveTo(point.x, point.y);
+                        else ctx.lineTo(point.x, point.y);
+                    }
+                    ctx.closePath();
+                    ctx.stroke();
+                }
+            });
+        }
+
+        window.addEventListener('beforeunload', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        });
+
+        loadModels();
+    </script>
+</body>
+</html>

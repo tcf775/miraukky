@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Permissions-Policy" content="camera=*, microphone=*">
+    <title>7種類の表情認識リアルタイムデモ</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        h1 {
+            margin-bottom: 20px;
+        }
+        #container {
+            display: flex;
+            gap: 30px;
+            align-items: flex-start;
+        }
+        #videoContainer {
+            position: relative;
+            display: inline-block;
+            line-height: 0;
+        }
+        #video {
+            width: 640px;
+            height: 480px;
+            transform: scaleX(-1);
+            border-radius: 10px;
+        }
+        #expressionsPanel {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 10px;
+            min-width: 300px;
+        }
+        .expression-item {
+            margin: 15px 0;
+        }
+        .expression-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        .expression-bar {
+            width: 100%;
+            height: 25px;
+            background: #444;
+            border-radius: 5px;
+            overflow: hidden;
+            position: relative;
+        }
+        .expression-fill {
+            height: 100%;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            padding-left: 10px;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        .dominant {
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+        #controls {
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin: 0 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        #status {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #aaa;
+        }
+        .emoji {
+            font-size: 24px;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>face-api.js 7種類の表情認識リアルタイムデモ</h1>
+    
+    <div id="controls">
+        <button id="startBtn" onclick="startVideo()">カメラ開始</button>
+        <button id="stopBtn" onclick="stopVideo()" disabled>停止</button>
+    </div>
+    
+    <div id="status">モデル読み込み中...</div>
+    
+    <div id="container">
+        <div id="videoContainer">
+            <video id="video" autoplay muted></video>
+        </div>
+        
+        <div id="expressionsPanel">
+            <h2 style="margin-top: 0;">表情分析結果</h2>
+            <div class="expression-item">
+                <div class="expression-label">
+                    <span><span class="emoji">😊</span>幸福 (happy)</span>
+                    <span id="happy-value">0%</span>
+                </div>
+                <div class="expression-bar">
+                    <div id="happy-bar" class="expression-fill" style="width: 0%; background: #4CAF50;"></div>
+                </div>
+            </div>
+            <div class="expression-item">
+                <div class="expression-label">
+                    <span><span class="emoji">😐</span>無表情 (neutral)</span>
+                    <span id="neutral-value">0%</span>
+                </div>
+                <div class="expression-bar">
+                    <div id="neutral-bar" class="expression-fill" style="width: 0%; background: #9E9E9E;"></div>
+                </div>
+            </div>
+            <div class="expression-item">
+                <div class="expression-label">
+                    <span><span class="emoji">😢</span>悲しみ (sad)</span>
+                    <span id="sad-value">0%</span>
+                </div>
+                <div class="expression-bar">
+                    <div id="sad-bar" class="expression-fill" style="width: 0%; background: #2196F3;"></div>
+                </div>
+            </div>
+            <div class="expression-item">
+                <div class="expression-label">
+                    <span><span class="emoji">😠</span>怒り (angry)</span>
+                    <span id="angry-value">0%</span>
+                </div>
+                <div class="expression-bar">
+                    <div id="angry-bar" class="expression-fill" style="width: 0%; background: #F44336;"></div>
+                </div>
+            </div>
+            <div class="expression-item">
+                <div class="expression-label">
+                    <span><span class="emoji">😱</span>恐怖 (fearful)</span>
+                    <span id="fearful-value">0%</span>
+                </div>
+                <div class="expression-bar">
+                    <div id="fearful-bar" class="expression-fill" style="width: 0%; background: #9C27B0;"></div>
+                </div>
+            </div>
+            <div class="expression-item">
+                <div class="expression-label">
+                    <span><span class="emoji">🤢</span>嫌悪 (disgusted)</span>
+                    <span id="disgusted-value">0%</span>
+                </div>
+                <div class="expression-bar">
+                    <div id="disgusted-bar" class="expression-fill" style="width: 0%; background: #8BC34A;"></div>
+                </div>
+            </div>
+            <div class="expression-item">
+                <div class="expression-label">
+                    <span><span class="emoji">😲</span>驚き (surprised)</span>
+                    <span id="surprised-value">0%</span>
+                </div>
+                <div class="expression-bar">
+                    <div id="surprised-bar" class="expression-fill" style="width: 0%; background: #FF9800;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let modelsLoaded = false;
+        let stream = null;
+        let detectionInterval = null;
+
+        async function loadModels() {
+            const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+            await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+            await faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL);
+            modelsLoaded = true;
+            document.getElementById('status').textContent = 'モデル読み込み完了！「カメラ開始」をクリックしてください。';
+        }
+
+        async function startVideo() {
+            if (!modelsLoaded) {
+                alert('モデルがまだ読み込まれていません。');
+                return;
+            }
+
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 640, height: 480 } 
+                });
+                const video = document.getElementById('video');
+                video.srcObject = stream;
+                
+                video.addEventListener('loadedmetadata', () => {
+                    document.getElementById('startBtn').disabled = true;
+                    document.getElementById('stopBtn').disabled = false;
+                    document.getElementById('status').textContent = 'リアルタイム表情認識中...';
+                    
+                    detectExpressionsRealtime();
+                });
+            } catch (err) {
+                alert('カメラのアクセスに失敗しました: ' + err.message);
+            }
+        }
+
+        function stopVideo() {
+            if (detectionInterval) {
+                clearInterval(detectionInterval);
+                detectionInterval = null;
+            }
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            
+            // リセット
+            const expressions = ['happy', 'neutral', 'sad', 'angry', 'fearful', 'disgusted', 'surprised'];
+            expressions.forEach(expr => {
+                document.getElementById(`${expr}-bar`).style.width = '0%';
+                document.getElementById(`${expr}-value`).textContent = '0%';
+                document.getElementById(`${expr}-bar`).classList.remove('dominant');
+            });
+            
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('status').textContent = '停止しました。';
+        }
+
+        async function detectExpressionsRealtime() {
+            const video = document.getElementById('video');
+            
+            detectionInterval = setInterval(async () => {
+                const detection = await faceapi
+                    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                    .withFaceExpressions();
+
+                if (detection) {
+                    updateExpressions(detection.expressions);
+                }
+            }, 100);
+        }
+
+        function updateExpressions(expressions) {
+            const expressionArray = [
+                { name: 'happy', value: expressions.happy },
+                { name: 'neutral', value: expressions.neutral },
+                { name: 'sad', value: expressions.sad },
+                { name: 'angry', value: expressions.angry },
+                { name: 'fearful', value: expressions.fearful },
+                { name: 'disgusted', value: expressions.disgusted },
+                { name: 'surprised', value: expressions.surprised }
+            ];
+
+            // 最も高い確率の表情を見つける
+            const dominant = expressionArray.reduce((max, expr) => 
+                expr.value > max.value ? expr : max
+            );
+
+            expressionArray.forEach(expr => {
+                const percentage = Math.round(expr.value * 100);
+                const bar = document.getElementById(`${expr.name}-bar`);
+                const value = document.getElementById(`${expr.name}-value`);
+                
+                bar.style.width = percentage + '%';
+                value.textContent = percentage + '%';
+                
+                // 最も高い表情を強調
+                if (expr.name === dominant.name) {
+                    bar.classList.add('dominant');
+                } else {
+                    bar.classList.remove('dominant');
+                }
+            });
+        }
+
+        window.addEventListener('beforeunload', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        });
+
+        loadModels();
+    </script>
+</body>
+</html>

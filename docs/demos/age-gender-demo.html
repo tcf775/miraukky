@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Permissions-Policy" content="camera=*, microphone=*">
+    <title>年齢・性別推定デモ</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        h1 { margin-bottom: 20px; }
+        #container {
+            display: flex;
+            gap: 30px;
+            align-items: flex-start;
+        }
+        #videoContainer {
+            position: relative;
+            display: inline-block;
+            line-height: 0;
+        }
+        #video {
+            width: 640px;
+            height: 480px;
+            transform: scaleX(-1);
+            border-radius: 10px;
+        }
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            transform: scaleX(-1);
+        }
+        #panel {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 10px;
+            min-width: 300px;
+        }
+        .info-item {
+            background: #333;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .info-label {
+            font-size: 14px;
+            color: #aaa;
+            margin-bottom: 5px;
+        }
+        .info-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin: 5px;
+        }
+        button:hover { background: #45a049; }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        #status {
+            margin: 10px 0;
+            font-size: 14px;
+            color: #aaa;
+        }
+        .warning {
+            background: #ff9800;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 20px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>face-api.js 年齢・性別推定デモ</h1>
+    
+    <div id="controls">
+        <button id="startBtn" onclick="startVideo()">カメラ開始</button>
+        <button id="stopBtn" onclick="stopVideo()" disabled>停止</button>
+    </div>
+    
+    <div id="status">モデル読み込み中...</div>
+    
+    <div id="container">
+        <div id="videoContainer">
+            <video id="video" autoplay muted></video>
+            <canvas id="overlay"></canvas>
+        </div>
+        
+        <div id="panel">
+            <h2>推定結果</h2>
+            <div class="info-item">
+                <div class="info-label">年齢</div>
+                <div class="info-value" id="ageValue">--</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">性別</div>
+                <div class="info-value" id="genderValue">--</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">性別確信度</div>
+                <div class="info-value" id="confidenceValue">--</div>
+            </div>
+            <div class="warning">
+                ⚠️ 注意: この推定は参考値です。年齢は±5-10歳の誤差があり、照明・角度・表情で精度が変動します。
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let modelsLoaded = false;
+        let stream = null;
+        let detectionInterval = null;
+
+        async function loadModels() {
+            const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+            await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+            await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+            await faceapi.nets.ageGenderNet.loadFromUri(MODEL_URL);
+            modelsLoaded = true;
+            document.getElementById('status').textContent = 'モデル読み込み完了！「カメラ開始」をクリックしてください。';
+        }
+
+        async function startVideo() {
+            if (!modelsLoaded) {
+                alert('モデルがまだ読み込まれていません。');
+                return;
+            }
+
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 640, height: 480 } 
+                });
+                const video = document.getElementById('video');
+                video.srcObject = stream;
+                
+                video.addEventListener('loadedmetadata', () => {
+                    const canvas = document.getElementById('overlay');
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    canvas.style.width = '640px';
+                    canvas.style.height = '480px';
+                    
+                    document.getElementById('startBtn').disabled = true;
+                    document.getElementById('stopBtn').disabled = false;
+                    document.getElementById('status').textContent = 'リアルタイム推定中...';
+                    
+                    detectAgeGenderRealtime();
+                });
+            } catch (err) {
+                alert('カメラのアクセスに失敗しました: ' + err.message);
+            }
+        }
+
+        function stopVideo() {
+            if (detectionInterval) {
+                clearInterval(detectionInterval);
+                detectionInterval = null;
+            }
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            const canvas = document.getElementById('overlay');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            document.getElementById('ageValue').textContent = '--';
+            document.getElementById('genderValue').textContent = '--';
+            document.getElementById('confidenceValue').textContent = '--';
+            
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('status').textContent = '停止しました。';
+        }
+
+        async function detectAgeGenderRealtime() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('overlay');
+            
+            detectionInterval = setInterval(async () => {
+                const detection = await faceapi
+                    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                    .withFaceLandmarks()
+                    .withAgeAndGender();
+
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                if (detection) {
+                    const box = detection.detection.box;
+                    const age = Math.round(detection.age);
+                    const gender = detection.gender === 'male' ? '男性' : '女性';
+                    const genderIcon = detection.gender === 'male' ? '👨' : '👩';
+                    const confidence = Math.round(detection.genderProbability * 100);
+                    
+                    // パネル更新
+                    document.getElementById('ageValue').textContent = `${age}歳`;
+                    document.getElementById('genderValue').textContent = `${genderIcon} ${gender}`;
+                    document.getElementById('confidenceValue').textContent = `${confidence}%`;
+                    
+                    // 顔枠描画
+                    ctx.strokeStyle = '#4CAF50';
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(box.x, box.y, box.width, box.height);
+                    
+                    // 情報表示（反転を考慮）
+                    ctx.save();
+                    ctx.scale(-1, 1);
+                    ctx.fillStyle = '#4CAF50';
+                    ctx.font = 'bold 20px Arial';
+                    ctx.fillText(`${age}歳 ${genderIcon}`, -(box.x + box.width), box.y - 10);
+                    ctx.restore();
+                }
+            }, 100);
+        }
+
+        window.addEventListener('beforeunload', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        });
+
+        loadModels();
+    </script>
+</body>
+</html>

@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Permissions-Policy" content="camera=*, microphone=*">
+    <title>顔認識・照合デモ</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        h1 { margin-bottom: 20px; }
+        #container {
+            display: flex;
+            gap: 30px;
+            align-items: flex-start;
+        }
+        #videoContainer {
+            position: relative;
+            display: inline-block;
+            line-height: 0;
+        }
+        #video {
+            width: 640px;
+            height: 480px;
+            transform: scaleX(-1);
+            border-radius: 10px;
+        }
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            transform: scaleX(-1);
+        }
+        #panel {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 10px;
+            min-width: 300px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin: 5px;
+        }
+        button:hover { background: #45a049; }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        button.danger { background: #f44336; }
+        button.danger:hover { background: #da190b; }
+        #status {
+            margin: 10px 0;
+            font-size: 14px;
+            color: #aaa;
+        }
+        .person-item {
+            background: #333;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .person-item button {
+            padding: 5px 10px;
+            font-size: 12px;
+            margin: 0;
+        }
+        #matchResult {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .match { background: #4CAF50; }
+        .no-match { background: #f44336; }
+    </style>
+</head>
+<body>
+    <h1>face-api.js 顔認識・照合デモ</h1>
+    
+    <div id="controls">
+        <button id="startBtn" onclick="startVideo()">カメラ開始</button>
+        <button id="stopBtn" onclick="stopVideo()" disabled>停止</button>
+        <button id="registerBtn" onclick="registerFace()" disabled>顔を登録</button>
+    </div>
+    
+    <div id="status">モデル読み込み中...</div>
+    
+    <div id="container">
+        <div id="videoContainer">
+            <video id="video" autoplay muted></video>
+            <canvas id="overlay"></canvas>
+        </div>
+        
+        <div id="panel">
+            <h2>登録済みの顔</h2>
+            <div id="personList"></div>
+            <div id="matchResult"></div>
+        </div>
+    </div>
+
+    <script>
+        let modelsLoaded = false;
+        let stream = null;
+        let detectionInterval = null;
+        let labeledDescriptors = [];
+        let faceMatcher = null;
+
+        async function loadModels() {
+            const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+            await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+            await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+            await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+            modelsLoaded = true;
+            document.getElementById('status').textContent = 'モデル読み込み完了！「カメラ開始」をクリックしてください。';
+        }
+
+        async function startVideo() {
+            if (!modelsLoaded) {
+                alert('モデルがまだ読み込まれていません。');
+                return;
+            }
+
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 640, height: 480 } 
+                });
+                const video = document.getElementById('video');
+                video.srcObject = stream;
+                
+                video.addEventListener('loadedmetadata', () => {
+                    const canvas = document.getElementById('overlay');
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    canvas.style.width = '640px';
+                    canvas.style.height = '480px';
+                    
+                    document.getElementById('startBtn').disabled = true;
+                    document.getElementById('stopBtn').disabled = false;
+                    document.getElementById('registerBtn').disabled = false;
+                    document.getElementById('status').textContent = 'リアルタイム認識中...';
+                    
+                    detectFacesRealtime();
+                });
+            } catch (err) {
+                alert('カメラのアクセスに失敗しました: ' + err.message);
+            }
+        }
+
+        function stopVideo() {
+            if (detectionInterval) {
+                clearInterval(detectionInterval);
+                detectionInterval = null;
+            }
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            const canvas = document.getElementById('overlay');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('registerBtn').disabled = true;
+            document.getElementById('status').textContent = '停止しました。';
+        }
+
+        async function registerFace() {
+            const video = document.getElementById('video');
+            const detection = await faceapi
+                .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                .withFaceLandmarks()
+                .withFaceDescriptor();
+
+            if (!detection) {
+                alert('顔が検出されませんでした。カメラに顔を映してください。');
+                return;
+            }
+
+            const name = prompt('登録する名前を入力してください:');
+            if (!name) return;
+
+            labeledDescriptors.push({
+                label: name,
+                descriptors: [detection.descriptor]
+            });
+
+            updateFaceMatcher();
+            updatePersonList();
+            alert(`${name} を登録しました！`);
+        }
+
+        function updateFaceMatcher() {
+            if (labeledDescriptors.length > 0) {
+                const labeledFaceDescriptors = labeledDescriptors.map(item => 
+                    new faceapi.LabeledFaceDescriptors(item.label, item.descriptors)
+                );
+                faceMatcher = new faceapi.FaceMatcher(labeledFaceDescriptors, 0.6);
+            }
+        }
+
+        function updatePersonList() {
+            const list = document.getElementById('personList');
+            list.innerHTML = labeledDescriptors.map((item, index) => `
+                <div class="person-item">
+                    <span>${item.label}</span>
+                    <button class="danger" onclick="deletePerson(${index})">削除</button>
+                </div>
+            `).join('');
+        }
+
+        function deletePerson(index) {
+            const name = labeledDescriptors[index].label;
+            if (confirm(`${name} を削除しますか？`)) {
+                labeledDescriptors.splice(index, 1);
+                updateFaceMatcher();
+                updatePersonList();
+            }
+        }
+
+        async function detectFacesRealtime() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('overlay');
+            
+            detectionInterval = setInterval(async () => {
+                const detection = await faceapi
+                    .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+                    .withFaceLandmarks()
+                    .withFaceDescriptor();
+
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                if (detection) {
+                    const box = detection.detection.box;
+                    
+                    // 顔認識結果
+                    let matchText = '未登録';
+                    let matchColor = '#ff6b6b';
+                    
+                    if (faceMatcher) {
+                        const bestMatch = faceMatcher.findBestMatch(detection.descriptor);
+                        matchText = bestMatch.label;
+                        matchColor = bestMatch.label !== 'unknown' ? '#4CAF50' : '#ff6b6b';
+                        
+                        // 結果表示
+                        const resultDiv = document.getElementById('matchResult');
+                        if (bestMatch.label !== 'unknown') {
+                            resultDiv.className = 'match';
+                            resultDiv.textContent = `✓ ${bestMatch.label} (距離: ${bestMatch.distance.toFixed(2)})`;
+                        } else {
+                            resultDiv.className = 'no-match';
+                            resultDiv.textContent = '✗ 未登録の顔';
+                        }
+                    }
+                    
+                    // 顔枠描画
+                    ctx.strokeStyle = matchColor;
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(box.x, box.y, box.width, box.height);
+                    
+                    // 名前表示（反転を考慮）
+                    ctx.save();
+                    ctx.scale(-1, 1);
+                    ctx.fillStyle = matchColor;
+                    ctx.font = 'bold 20px Arial';
+                    ctx.fillText(matchText, -(box.x + box.width), box.y - 10);
+                    ctx.restore();
+                }
+            }, 100);
+        }
+
+        window.addEventListener('beforeunload', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        });
+
+        loadModels();
+    </script>
+</body>
+</html>

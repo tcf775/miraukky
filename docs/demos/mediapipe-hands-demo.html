@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediaPipe 手の検出デモ</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        h1 { margin-bottom: 20px; }
+        #container {
+            display: flex;
+            gap: 30px;
+            align-items: flex-start;
+        }
+        #videoContainer {
+            position: relative;
+            display: inline-block;
+        }
+        #video {
+            width: 640px;
+            height: 480px;
+            transform: scaleX(-1);
+            border-radius: 10px;
+            display: none;
+        }
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 640px;
+            height: 480px;
+            transform: scaleX(-1);
+        }
+        #infoPanel {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 10px;
+            min-width: 300px;
+        }
+        .info-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: #333;
+            border-radius: 5px;
+        }
+        #controls { margin: 20px 0; }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin: 0 5px;
+        }
+        button:hover { background: #45a049; }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        #status {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+    <h1>MediaPipe 手の検出デモ（ハンドトラッキング）</h1>
+    
+    <div id="controls">
+        <button id="startBtn" onclick="startCamera()">カメラ開始</button>
+        <button id="stopBtn" onclick="stopCamera()" disabled>停止</button>
+    </div>
+    
+    <div id="status">準備完了</div>
+    
+    <div id="container">
+        <div id="videoContainer">
+            <video id="video" autoplay muted></video>
+            <canvas id="canvas"></canvas>
+        </div>
+        
+        <div id="infoPanel">
+            <h2 style="margin-top: 0;">検出情報</h2>
+            <div class="info-item">
+                <strong>検出された手:</strong><br>
+                <span id="handCount">0</span> 個
+            </div>
+            <div class="info-item">
+                <strong>左手:</strong><br>
+                <span id="leftHand">-</span>
+            </div>
+            <div class="info-item">
+                <strong>右手:</strong><br>
+                <span id="rightHand">-</span>
+            </div>
+            <div class="info-item">
+                <strong>ジェスチャー:</strong><br>
+                <span id="gesture">-</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let camera = null;
+        let hands = null;
+
+        function startCamera() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            
+            canvas.width = 640;
+            canvas.height = 480;
+            
+            hands = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+            });
+            
+            hands.setOptions({
+                maxNumHands: 2,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            
+            hands.onResults(onResults);
+            
+            camera = new Camera(video, {
+                onFrame: async () => {
+                    await hands.send({image: video});
+                },
+                width: 640,
+                height: 480
+            });
+            
+            camera.start();
+            video.style.display = 'block';
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            document.getElementById('status').textContent = 'リアルタイム検出中...';
+        }
+
+        function stopCamera() {
+            if (camera) {
+                camera.stop();
+                camera = null;
+            }
+            if (hands) {
+                hands.close();
+                hands = null;
+            }
+            
+            const video = document.getElementById('video');
+            video.style.display = 'none';
+            
+            const canvas = document.getElementById('canvas');
+            const canvasCtx = canvas.getContext('2d');
+            canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            document.getElementById('handCount').textContent = '0';
+            document.getElementById('leftHand').textContent = '-';
+            document.getElementById('rightHand').textContent = '-';
+            document.getElementById('gesture').textContent = '-';
+            
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('status').textContent = '停止しました。';
+        }
+
+        function onResults(results) {
+            const canvas = document.getElementById('canvas');
+            const canvasCtx = canvas.getContext('2d');
+            
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+            canvasCtx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+            
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                document.getElementById('handCount').textContent = results.multiHandLandmarks.length;
+                
+                for (let i = 0; i < results.multiHandLandmarks.length; i++) {
+                    const landmarks = results.multiHandLandmarks[i];
+                    const handedness = results.multiHandedness[i].label;
+                    
+                    drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 5});
+                    drawLandmarks(canvasCtx, landmarks, {color: '#FF0000', lineWidth: 2});
+                    
+                    analyzeHand(landmarks, handedness);
+                }
+            } else {
+                document.getElementById('handCount').textContent = '0';
+                document.getElementById('leftHand').textContent = '検出されていません';
+                document.getElementById('rightHand').textContent = '検出されていません';
+                document.getElementById('gesture').textContent = '-';
+            }
+            
+            canvasCtx.restore();
+        }
+
+        function analyzeHand(landmarks, handedness) {
+            const wrist = landmarks[0];
+            const thumb = landmarks[4];
+            const index = landmarks[8];
+            const middle = landmarks[12];
+            const ring = landmarks[16];
+            const pinky = landmarks[20];
+            
+            const thumbUp = thumb.y < landmarks[3].y;
+            const indexUp = index.y < landmarks[6].y;
+            const middleUp = middle.y < landmarks[10].y;
+            const ringUp = ring.y < landmarks[14].y;
+            const pinkyUp = pinky.y < landmarks[18].y;
+            
+            const fingersUp = [thumbUp, indexUp, middleUp, ringUp, pinkyUp].filter(x => x).length;
+            
+            let gesture = '';
+            if (fingersUp === 0) {
+                gesture = '✊ グー';
+            } else if (fingersUp === 2 && indexUp && middleUp) {
+                gesture = '✌️ ピース';
+            } else if (fingersUp === 5) {
+                gesture = '✋ パー';
+            } else if (fingersUp === 1 && indexUp) {
+                gesture = '☝️ 指差し';
+            } else if (fingersUp === 1 && thumbUp) {
+                gesture = '👍 いいね';
+            } else {
+                gesture = `${fingersUp}本指を立てている`;
+            }
+            
+            if (handedness === 'Right') {
+                document.getElementById('leftHand').textContent = gesture;
+            } else {
+                document.getElementById('rightHand').textContent = gesture;
+            }
+            
+            document.getElementById('gesture').textContent = gesture;
+        }
+    </script>
+</body>
+</html>

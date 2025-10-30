@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TensorFlow.js 物体検出デモ</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        h1 { margin-bottom: 20px; }
+        #container {
+            display: flex;
+            gap: 30px;
+            align-items: flex-start;
+        }
+        #videoContainer {
+            position: relative;
+            display: inline-block;
+        }
+        #video {
+            width: 640px;
+            height: 480px;
+            transform: scaleX(-1);
+            border-radius: 10px;
+            display: none;
+        }
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 640px;
+            height: 480px;
+            transform: scaleX(-1);
+        }
+        #infoPanel {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 10px;
+            min-width: 300px;
+        }
+        .info-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: #333;
+            border-radius: 5px;
+        }
+        #controls { margin: 20px 0; }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin: 0 5px;
+        }
+        button:hover { background: #45a049; }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        #status {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #aaa;
+        }
+        #objectList {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .object-entry {
+            padding: 8px;
+            margin: 5px 0;
+            background: #444;
+            border-radius: 3px;
+            font-size: 14px;
+        }
+        .confidence-bar {
+            width: 100%;
+            height: 8px;
+            background: #555;
+            border-radius: 4px;
+            margin-top: 5px;
+            overflow: hidden;
+        }
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #8BC34A);
+        }
+    </style>
+</head>
+<body>
+    <h1>TensorFlow.js COCO-SSD 物体検出デモ</h1>
+    
+    <div id="controls">
+        <button id="startBtn" onclick="startCamera()">カメラ開始</button>
+        <button id="stopBtn" onclick="stopCamera()" disabled>停止</button>
+    </div>
+    
+    <div id="status">モデル読み込み中...</div>
+    
+    <div id="container">
+        <div id="videoContainer">
+            <video id="video" autoplay muted></video>
+            <canvas id="canvas"></canvas>
+        </div>
+        
+        <div id="infoPanel">
+            <h2 style="margin-top: 0;">検出情報</h2>
+            <div class="info-item">
+                <strong>検出された物体:</strong><br>
+                <span id="objectCount">0</span> 個
+            </div>
+            <div class="info-item">
+                <strong>検出可能な物体:</strong><br>
+                人、自転車、車、バイク、飛行機、バス、電車、トラック、ボート、信号機、消火栓、停止標識、パーキングメーター、ベンチ、鳥、猫、犬、馬、羊、牛、象、熊、シマウマ、キリン、バックパック、傘、ハンドバッグ、ネクタイ、スーツケース、フリスビー、スキー、スノーボード、スポーツボール、凧、野球バット、野球グローブ、スケートボード、サーフボード、テニスラケット、ボトル、ワイングラス、カップ、フォーク、ナイフ、スプーン、ボウル、バナナ、リンゴ、サンドイッチ、オレンジ、ブロッコリー、ニンジン、ホットドッグ、ピザ、ドーナツ、ケーキ、椅子、ソファ、鉢植え、ベッド、ダイニングテーブル、トイレ、テレビ、ノートパソコン、マウス、リモコン、キーボード、携帯電話、電子レンジ、オーブン、トースター、シンク、冷蔵庫、本、時計、花瓶、ハサミ、テディベア、ヘアドライヤー、歯ブラシ など80種類
+            </div>
+            <div id="objectList"></div>
+        </div>
+    </div>
+
+    <script>
+        let model = null;
+        let stream = null;
+        let detectionInterval = null;
+
+        const labelTranslations = {
+            'person': '人', 'bicycle': '自転車', 'car': '車', 'motorcycle': 'バイク',
+            'airplane': '飛行機', 'bus': 'バス', 'train': '電車', 'truck': 'トラック',
+            'boat': 'ボート', 'traffic light': '信号機', 'fire hydrant': '消火栓',
+            'stop sign': '停止標識', 'parking meter': 'パーキングメーター', 'bench': 'ベンチ',
+            'bird': '鳥', 'cat': '猫', 'dog': '犬', 'horse': '馬', 'sheep': '羊',
+            'cow': '牛', 'elephant': '象', 'bear': '熊', 'zebra': 'シマウマ', 'giraffe': 'キリン',
+            'backpack': 'バックパック', 'umbrella': '傘', 'handbag': 'ハンドバッグ',
+            'tie': 'ネクタイ', 'suitcase': 'スーツケース', 'frisbee': 'フリスビー',
+            'skis': 'スキー', 'snowboard': 'スノーボード', 'sports ball': 'スポーツボール',
+            'kite': '凧', 'baseball bat': '野球バット', 'baseball glove': '野球グローブ',
+            'skateboard': 'スケートボード', 'surfboard': 'サーフボード', 'tennis racket': 'テニスラケット',
+            'bottle': 'ボトル', 'wine glass': 'ワイングラス', 'cup': 'カップ',
+            'fork': 'フォーク', 'knife': 'ナイフ', 'spoon': 'スプーン', 'bowl': 'ボウル',
+            'banana': 'バナナ', 'apple': 'リンゴ', 'sandwich': 'サンドイッチ',
+            'orange': 'オレンジ', 'broccoli': 'ブロッコリー', 'carrot': 'ニンジン',
+            'hot dog': 'ホットドッグ', 'pizza': 'ピザ', 'donut': 'ドーナツ', 'cake': 'ケーキ',
+            'chair': '椅子', 'couch': 'ソファ', 'potted plant': '鉢植え', 'bed': 'ベッド',
+            'dining table': 'ダイニングテーブル', 'toilet': 'トイレ', 'tv': 'テレビ',
+            'laptop': 'ノートパソコン', 'mouse': 'マウス', 'remote': 'リモコン',
+            'keyboard': 'キーボード', 'cell phone': '携帯電話', 'microwave': '電子レンジ',
+            'oven': 'オーブン', 'toaster': 'トースター', 'sink': 'シンク',
+            'refrigerator': '冷蔵庫', 'book': '本', 'clock': '時計', 'vase': '花瓶',
+            'scissors': 'ハサミ', 'teddy bear': 'テディベア', 'hair drier': 'ヘアドライヤー',
+            'toothbrush': '歯ブラシ'
+        };
+
+        async function loadModel() {
+            model = await cocoSsd.load();
+            document.getElementById('status').textContent = 'モデル読み込み完了！「カメラ開始」をクリックしてください。';
+        }
+
+        async function startCamera() {
+            if (!model) {
+                alert('モデルがまだ読み込まれていません。');
+                return;
+            }
+
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: 640, height: 480 } 
+                });
+                const video = document.getElementById('video');
+                video.srcObject = stream;
+                
+                video.addEventListener('loadedmetadata', () => {
+                    document.getElementById('startBtn').disabled = true;
+                    document.getElementById('stopBtn').disabled = false;
+                    document.getElementById('status').textContent = 'リアルタイム物体検出中...';
+                    video.style.display = 'block';
+                    
+                    detectObjects();
+                });
+            } catch (err) {
+                alert('カメラのアクセスに失敗しました: ' + err.message);
+            }
+        }
+
+        function stopCamera() {
+            if (detectionInterval) {
+                clearInterval(detectionInterval);
+                detectionInterval = null;
+            }
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            
+            const video = document.getElementById('video');
+            video.style.display = 'none';
+            
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            document.getElementById('objectCount').textContent = '0';
+            document.getElementById('objectList').innerHTML = '';
+            
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('status').textContent = '停止しました。';
+        }
+
+        async function detectObjects() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = 640;
+            canvas.height = 480;
+            
+            detectionInterval = setInterval(async () => {
+                const predictions = await model.detect(video);
+                
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                document.getElementById('objectCount').textContent = predictions.length;
+                
+                let objectListHTML = '';
+                
+                predictions.forEach((prediction, i) => {
+                    const [x, y, width, height] = prediction.bbox;
+                    
+                    ctx.strokeStyle = '#00FF00';
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(x, y, width, height);
+                    
+                    ctx.save();
+                    ctx.scale(-1, 1);
+                    ctx.fillStyle = '#00FF00';
+                    ctx.font = '18px Arial';
+                    const label = labelTranslations[prediction.class] || prediction.class;
+                    const confidence = (prediction.score * 100).toFixed(1);
+                    ctx.fillText(`${label} ${confidence}%`, -(x + width), y > 20 ? y - 5 : y + 20);
+                    ctx.restore();
+                    
+                    objectListHTML += `
+                        <div class="object-entry">
+                            <strong>${label}</strong> (${prediction.class})<br>
+                            信頼度: ${confidence}%
+                            <div class="confidence-bar">
+                                <div class="confidence-fill" style="width: ${confidence}%"></div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                document.getElementById('objectList').innerHTML = objectListHTML || '<div class="object-entry">物体が検出されていません</div>';
+            }, 200);
+        }
+
+        window.addEventListener('beforeunload', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        });
+
+        loadModel();
+    </script>
+</body>
+</html>

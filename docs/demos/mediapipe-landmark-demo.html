@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediaPipe 顔ランドマーク検出デモ</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background: #1a1a1a;
+            color: white;
+        }
+        h1 { margin-bottom: 20px; }
+        #container {
+            display: flex;
+            gap: 30px;
+            align-items: flex-start;
+        }
+        #videoContainer {
+            position: relative;
+            display: inline-block;
+        }
+        #video {
+            width: 640px;
+            height: 480px;
+            transform: scaleX(-1);
+            border-radius: 10px;
+            display: none;
+        }
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 640px;
+            height: 480px;
+            transform: scaleX(-1);
+        }
+        #infoPanel {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 10px;
+            min-width: 300px;
+        }
+        .info-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: #333;
+            border-radius: 5px;
+        }
+        #controls { margin: 20px 0; }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            margin: 0 5px;
+        }
+        button:hover { background: #45a049; }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        #status {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #aaa;
+        }
+        .checkbox-group {
+            margin: 15px 0;
+        }
+        label {
+            display: block;
+            margin: 5px 0;
+            cursor: pointer;
+        }
+        input[type="checkbox"] {
+            margin-right: 8px;
+        }
+    </style>
+</head>
+<body>
+    <h1>MediaPipe 顔ランドマーク検出デモ</h1>
+    
+    <div id="controls">
+        <button id="startBtn" onclick="startCamera()">カメラ開始</button>
+        <button id="stopBtn" onclick="stopCamera()" disabled>停止</button>
+    </div>
+    
+    <div id="status">準備完了</div>
+    
+    <div id="container">
+        <div id="videoContainer">
+            <video id="video" autoplay muted></video>
+            <canvas id="canvas"></canvas>
+        </div>
+        
+        <div id="infoPanel">
+            <h2 style="margin-top: 0;">表示設定</h2>
+            <div class="checkbox-group">
+                <label><input type="checkbox" id="showMesh" checked> メッシュ表示</label>
+                <label><input type="checkbox" id="showEyes" checked> 目の輪郭</label>
+                <label><input type="checkbox" id="showLips" checked> 唇の輪郭</label>
+                <label><input type="checkbox" id="showIris" checked> 虹彩</label>
+            </div>
+            
+            <h2>検出情報</h2>
+            <div class="info-item">
+                <strong>検出ランドマーク数:</strong><br>
+                <span id="landmarkCount">0</span> 個
+            </div>
+            <div class="info-item">
+                <strong>顔の向き:</strong><br>
+                <span id="faceOrientation">-</span>
+            </div>
+            <div class="info-item">
+                <strong>目の状態:</strong><br>
+                左目: <span id="leftEye">-</span><br>
+                右目: <span id="rightEye">-</span>
+            </div>
+            <div class="info-item">
+                <strong>口の状態:</strong><br>
+                <span id="mouthState">-</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let camera = null;
+        let faceMesh = null;
+
+        function startCamera() {
+            const video = document.getElementById('video');
+            const canvas = document.getElementById('canvas');
+            const canvasCtx = canvas.getContext('2d');
+            
+            canvas.width = 640;
+            canvas.height = 480;
+            
+            faceMesh = new FaceMesh({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+            });
+            
+            faceMesh.setOptions({
+                maxNumFaces: 1,
+                refineLandmarks: true,
+                minDetectionConfidence: 0.5,
+                minTrackingConfidence: 0.5
+            });
+            
+            faceMesh.onResults(onResults);
+            
+            camera = new Camera(video, {
+                onFrame: async () => {
+                    await faceMesh.send({image: video});
+                },
+                width: 640,
+                height: 480
+            });
+            
+            camera.start();
+            video.style.display = 'block';
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            document.getElementById('status').textContent = 'リアルタイム検出中...';
+        }
+
+        function stopCamera() {
+            if (camera) {
+                camera.stop();
+                camera = null;
+            }
+            if (faceMesh) {
+                faceMesh.close();
+                faceMesh = null;
+            }
+            
+            const video = document.getElementById('video');
+            video.style.display = 'none';
+            
+            const canvas = document.getElementById('canvas');
+            const canvasCtx = canvas.getContext('2d');
+            canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            document.getElementById('landmarkCount').textContent = '0';
+            document.getElementById('faceOrientation').textContent = '-';
+            document.getElementById('leftEye').textContent = '-';
+            document.getElementById('rightEye').textContent = '-';
+            document.getElementById('mouthState').textContent = '-';
+            
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('status').textContent = '停止しました。';
+        }
+
+        function onResults(results) {
+            const canvas = document.getElementById('canvas');
+            const canvasCtx = canvas.getContext('2d');
+            
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
+            canvasCtx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
+            
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                const landmarks = results.multiFaceLandmarks[0];
+                
+                if (document.getElementById('showMesh').checked) {
+                    drawConnectors(canvasCtx, landmarks, FACEMESH_TESSELATION, {color: '#C0C0C070', lineWidth: 1});
+                }
+                if (document.getElementById('showEyes').checked) {
+                    drawConnectors(canvasCtx, landmarks, FACEMESH_RIGHT_EYE, {color: '#FF3030', lineWidth: 2});
+                    drawConnectors(canvasCtx, landmarks, FACEMESH_LEFT_EYE, {color: '#30FF30', lineWidth: 2});
+                }
+                if (document.getElementById('showLips').checked) {
+                    drawConnectors(canvasCtx, landmarks, FACEMESH_LIPS, {color: '#E0E0E0', lineWidth: 2});
+                }
+                if (document.getElementById('showIris').checked) {
+                    drawConnectors(canvasCtx, landmarks, FACEMESH_RIGHT_IRIS, {color: '#FF3030'});
+                    drawConnectors(canvasCtx, landmarks, FACEMESH_LEFT_IRIS, {color: '#30FF30'});
+                }
+                
+                analyzeFace(landmarks);
+            } else {
+                document.getElementById('landmarkCount').textContent = '0';
+                document.getElementById('faceOrientation').textContent = '顔が検出されていません';
+            }
+            
+            canvasCtx.restore();
+        }
+
+        function analyzeFace(landmarks) {
+            document.getElementById('landmarkCount').textContent = landmarks.length;
+            
+            const nose = landmarks[1];
+            const leftFace = landmarks[234];
+            const rightFace = landmarks[454];
+            const chin = landmarks[152];
+            const forehead = landmarks[10];
+            
+            const faceWidth = Math.abs(rightFace.x - leftFace.x);
+            const noseOffset = (nose.x - (leftFace.x + rightFace.x) / 2) / faceWidth;
+            const faceHeight = Math.abs(chin.y - forehead.y);
+            const noseVertical = (nose.y - forehead.y) / faceHeight;
+            
+            let orientation = '正面';
+            if (noseOffset > 0.08) {
+                orientation = '左向き';
+            } else if (noseOffset < -0.08) {
+                orientation = '右向き';
+            }
+            
+            if (noseVertical < 0.45) {
+                orientation += ' (上向き)';
+            } else if (noseVertical > 0.55) {
+                orientation += ' (下向き)';
+            }
+            document.getElementById('faceOrientation').textContent = orientation;
+            
+            const leftEyeTop = landmarks[159];
+            const leftEyeBottom = landmarks[145];
+            const leftEyeOpen = Math.abs(leftEyeTop.y - leftEyeBottom.y) * 100;
+            
+            const rightEyeTop = landmarks[386];
+            const rightEyeBottom = landmarks[374];
+            const rightEyeOpen = Math.abs(rightEyeTop.y - rightEyeBottom.y) * 100;
+            
+            document.getElementById('leftEye').textContent = leftEyeOpen > 1.5 ? '開いている' : '閉じている';
+            document.getElementById('rightEye').textContent = rightEyeOpen > 1.5 ? '開いている' : '閉じている';
+            
+            const topLip = landmarks[13];
+            const bottomLip = landmarks[14];
+            const mouthOpen = Math.abs(topLip.y - bottomLip.y) * 100;
+            
+            let mouthState = '閉じている';
+            if (mouthOpen > 2) {
+                mouthState = '大きく開いている';
+            } else if (mouthOpen > 1) {
+                mouthState = '少し開いている';
+            }
+            document.getElementById('mouthState').textContent = mouthState;
+        }
+    </script>
+</body>
+</html>
